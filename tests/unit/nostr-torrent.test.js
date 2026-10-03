@@ -30,11 +30,15 @@ test('danish heuristic', () => {
 
 const relayEvent = (ev) => JSON.stringify(['EVENT', 'sub', ev]);
 
-test('nostr notes: subscribes on 3 relays, dedupes, geotags, danish filter', () => {
+test('nostr notes: subscribes on several relays, dedupes, geotags, danish filter, relay count status', () => {
   const src = SOURCE_BY_ID['nostr-notes'];
   const { ctx, rec } = fakeCtx(src);
   src.start(ctx);
-  assert.equal(rec.ws.length, 3);
+  assert.equal(rec.ws.length, 5);
+  rec.ws[0].onState(true);
+  rec.ws[1].onState(true);
+  rec.ws[1].onState(false);
+  assert.deepEqual(rec.status.at(-1), ['ok', '1/5 relays'], 'one relay down does not mark the source down');
   const sent = [];
   rec.ws[0].onOpen({ send: (m) => sent.push(JSON.parse(m)) });
   assert.equal(sent[0][0], 'REQ');

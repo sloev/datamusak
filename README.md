@@ -12,7 +12,7 @@ It's a static site with no server and no build step. It is also an installable P
 
 Mapping is **deterministic**: the same data always makes the same sound. Nothing is random, and nothing "learns" ranges.
 
-- **Identity → instrument and register.** Every event carries the most individual identifier its data has: a ship's MMSI, an aircraft's transponder code, a weather station, a Wikipedia editor, a Nostr author, a sending Bitcoin wallet, a Helsinki tram, a listener's peer id, and so on. The identity picks the instrument from the source's instrument families, plus its own transposition, so ten stations sound like ten different players.
+- **Identity → instrument and register.** Every event carries the most individual identifier its data has: a ship's MMSI, a pilot's callsign, a weather station, a Wikipedia editor, a Nostr author, a sending Bitcoin address, a Helsinki tram, a listener's peer id, and so on. The identity picks the instrument from the source's instrument families, plus its own transposition, so ten stations sound like ten different players.
 - **Value → melody.** The melody field walks the chosen scale in fine steps (by default the field's physical range in 36 steps). At the edge of the register it bounces back instead of jumping, so small changes like 12.1 → 12.9 °C still move the tune.
 - **Other fields → fixed ranges.** Loudness, note length (snapped to musical lengths), left/right and brightness come from fixed physical ranges.
 - **The original sounds:** instruments use Radio Nabovarme's own WebAudioFont sample sets where it had them: the JCLive drum kit, FluidR3 marimba, music box and pan flute, GeneralUserGS fretless bass, and SBLive glockenspiel and electric piano. Everything else prefers the same sound fonts (FluidR3 → GeneralUserGS → SBLive → JCLive → Chaos → Aspirin).
@@ -35,16 +35,16 @@ Mapping is **deterministic**: the same data always makes the same sound. Nothing
 
 | Source | Transport | Where |
 |---|---|---|
-| Energinet: power grid right now (production + every interconnector) | REST, per minute | 🇩🇰 |
-| Energinet: CO₂ & wind, last hour (looping bass line) | REST | 🇩🇰 |
+| Energinet: power grid right now (production + every interconnector) | REST, via a 10-minute mirror ¹ | 🇩🇰 |
+| Energinet: CO₂ & wind, last hour (looping bass line) | REST, via a 10-minute mirror ¹ | 🇩🇰 |
 | Electricity spot price today, DK1/DK2 (elprisenligenu.dk) | REST | 🇩🇰 |
 | DMI weather stations (metObs, no API key) | REST | 🇩🇰 |
 | DMI lightning strikes | REST | 🇩🇰 |
 | DMI sea level / tide gauges | REST | 🇩🇰 |
 | Open-Meteo, 15 Danish towns (DMI HARMONIE model) | REST | 🇩🇰 |
 | Sensor.Community citizen air-quality sensors | REST | 🇩🇰 |
-| Bike share via GBFS (Donkey Republic Copenhagen; any GBFS URL works) | REST | 🇩🇰 |
-| Aircraft over Denmark (adsb.lol, with OpenSky as fallback) | REST | 🇩🇰 |
+| Bikes & scooters picked up and parked, via GBFS (Dott Copenhagen; any CORS-enabled GBFS URL works) | REST | 🇩🇰 |
+| Flight-sim pilots flying live on VATSIM (Denmark / Europe / world) ² | REST | world |
 | Ships (AIS) via Digitraffic | MQTT/WSS | Baltic / Danish straits |
 | Helsinki trams/metro/buses (HSL HFP) | MQTT/WSS | 🇫🇮 |
 | Finnish trains (Digitraffic) | MQTT/WSS | 🇫🇮 |
@@ -53,7 +53,7 @@ Mapping is **deterministic**: the same data always makes the same sound. Nothing
 | Earthquakes, last 24 h (USGS) | REST | world |
 | International Space Station position | REST | world |
 | Crypto trades (Coinbase) | WebSocket | internet |
-| Bitcoin unconfirmed transactions | WebSocket | internet |
+| Bitcoin unconfirmed transactions (mempool.space) | WebSocket | internet |
 | Nostr notes (geotagged notes land on the map; optional Danish filter) | Nostr relays | internet |
 | Nostr zaps (sats read from the BOLT11 invoice) | Nostr relays | internet |
 | Nostr firehose (every event kind) | Nostr relays | internet |
@@ -62,6 +62,9 @@ Mapping is **deterministic**: the same data always makes the same sound. Nothing
 | gifshooter painters (strokes drawn over a map of Denmark) | WebRTC (Trystero/Nostr) | peers |
 | Custom MQTT broker + topic (default: public Mosquitto test broker) | MQTT/WSS | anywhere |
 | Offline random walk (for testing) | — | — |
+
+¹ Energinet's Energi Data Service refuses requests from browsers (it answers an empty page to any request with an `Origin` header). `.github/workflows/data-mirror.yml` copies the last hour to the `data` branch every 10 minutes, and `raw.githubusercontent.com` serves it with CORS.
+² Every real ADS-B feed we tried (adsb.lol, adsb.fi, OpenSky, airplanes.live, adsb.one) blocks browsers. VATSIM pilots fly the same routes in flight simulators, live, with CORS.
 
 ### Reachability, measured weekly
 

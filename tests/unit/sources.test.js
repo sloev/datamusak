@@ -62,13 +62,13 @@ const gridRecord = (i) => ({
 });
 
 test('energinet grid: one event per component, nulls skipped', async () => {
-  const rec = await runRest('energinet-grid', { energidataservice: { records: [gridRecord(1), { ...gridRecord(0), Exchange_DK1_GB: null }] } });
+  const rec = await runRest('energinet-grid', { 'datamusak/data/grid.json': { records: [gridRecord(1), { ...gridRecord(0), Exchange_DK1_GB: null }] } });
   assert.equal(rec.sequences[0].items.length, 13);
 });
 
 test('energinet co2: chronological 60-minute loop', async () => {
   const records = Array.from({ length: 60 }, (_, i) => gridRecord(59 - i));
-  const rec = await runRest('energinet-co2', { energidataservice: { records } }, { geo: false });
+  const rec = await runRest('energinet-co2', { 'datamusak/data/grid.json': { records } }, { geo: false });
   const items = rec.sequences[0].items;
   assert.equal(items.length, 60);
   assert.equal(items[0].values.co2, 90);
@@ -171,21 +171,29 @@ test('bike share: initial sweep, then only changes', async () => {
   checkEvents(src, rec.spread);
 });
 
-test('aircraft: adsb.lol format, ground altitude handled', async () => {
-  await runRest('aircraft', {
-    'api.adsb.lol': { ac: [
-      { hex: '45ac2d', flight: 'SAS1234 ', lat: 55.6, lon: 12.6, alt_baro: 35000, gs: 450.2, track: 270.1, baro_rate: -64 },
-      { hex: '4ca7b8', lat: 55.62, lon: 12.65, alt_baro: 'ground', gs: 12, track: 90 },
-      { hex: 'no-pos', alt_baro: 1000 },
-    ] },
-  }, { min: 2 });
-});
-
-test('aircraft: falls back to OpenSky', async () => {
-  const rec = await runRest('aircraft', {
-    'opensky-network.org': { states: [['45ac2d', 'SAS1234 ', 'Denmark', 0, 0, 12.6, 55.6, 10668, false, 231.5, 270, -0.3]] },
+test('aircraft: VATSIM pilots in the region, vertical rate between polls', async () => {
+  let alt = 30000;
+  const t = Date.parse('2026-10-03T12:00:00Z');
+  let n = 0;
+  const { ctx, rec } = fakeCtx(SOURCE_BY_ID.aircraft, {
+    'data.vatsim.net': () => ({
+      general: { update_timestamp: new Date(t + n++ * 60000).toISOString() },
+      pilots: [
+        { callsign: 'SAS123', latitude: 55.6, longitude: 12.6, altitude: alt, groundspeed: 450, heading: 270, flight_plan: { arrival: 'EKCH' } },
+        { callsign: 'PARKED', latitude: 55.6, longitude: 12.6, altitude: 30, groundspeed: 0, heading: 90 },
+        { callsign: 'FAR', latitude: -33.9, longitude: 151.2, altitude: 35000, groundspeed: 480, heading: 10 },
+      ],
+    }),
   });
-  assert.ok(Math.abs(rec.spread[0].values.alt - 35000) < 10, 'metres converted to feet');
+  ctx.options.region = 'dk';
+  SOURCE_BY_ID.aircraft.start(ctx);
+  await rec.runPolls();
+  alt = 28000;
+  await rec.runPolls();
+  assert.equal(rec.spread.length, 2, 'only airborne pilots inside the region');
+  assert.equal(rec.spread[0].key, 'SAS123');
+  assert.equal(rec.spread[1].values.vrate, -2000);
+  checkEvents(SOURCE_BY_ID.aircraft, rec.spread);
 });
 
 test('usgs: chronological with real positions', async () => {
@@ -268,12 +276,39 @@ test('coinbase: subscribes and parses matches', () => {
   checkEvents(src, rec.emitted, { geo: false });
 });
 
-test('bitcoin mempool: parses utx', () => {
+test('bitcoin mempool: parses mempool.space added transactions', () => {
   const { src, rec } = push('bitcoin-mempool');
-  rec.ws[0].onMessage(JSON.stringify({ op: 'utx', x: { hash: 'ab12', size: 225, vin_sz: 1, vout_sz: 2, inputs: [{ prev_out: { addr: 'bc1qwallet', value: 2700000 } }], out: [{ value: 150000 }, { value: 2500000 }] } }));
-  assert.equal(rec.emitted[0].key, 'bc1qwallet', 'the sending wallet is the identity');
+  const sent = [];
+  rec.ws[0].onOpen({ send: (m) => sent.push(JSON.parse(m)) });
+  assert.deepEqual(sent[0], { 'track-mempool': true });
+  rec.ws[0].onMessage(JSON.stringify({ mempoolInfo: { size: 1 } }));
+  rec.ws[0].onMessage(JSON.stringify({ 'mempool-transactions': { sequence: 1, added: [
+    { txid: 'ab12', weight: 561, fee: 282, vin: [{ prevout: { scriptpubkey_address: 'bc1qwallet', value: 2700000 } }], vout: [{ value: 150000 }, { value: 2500000 }] },
+    { txid: 'cd34', size: 300, vin: [{ prevout: {} }], vout: [{ value: 1000 }] },
+  ] } }));
+  assert.equal(rec.emitted.length, 2);
+  assert.equal(rec.emitted[0].key, 'bc1qwallet', 'the sending address is the identity');
   assert.equal(rec.emitted[0].values.btc, 0.0265);
+  assert.equal(rec.emitted[1].key, 'cd34');
   checkEvents(src, rec.emitted, { geo: false });
+});
+
+test('bikeshare: free-floating vehicles parked and picked up', async () => {
+  const src = SOURCE_BY_ID.bikeshare;
+  let bikes = [{ bike_id: 'a', lat: 55.68, lon: 12.57, current_range_meters: 30000 }, { bike_id: 'b', lat: 55.67, lon: 12.56 }];
+  const { ctx, rec } = fakeCtx(src, {
+    'gbfs.json': { data: { en: { feeds: [{ name: 'free_bike_status', url: 'https://x/fbs.json' }] } } },
+    'fbs.json': () => ({ data: { bikes } }),
+  });
+  src.start(ctx);
+  await rec.runPolls();
+  assert.equal(rec.spread.length, 2, 'initial sweep');
+  bikes = [bikes[0], { bike_id: 'c', lat: 55.7, lon: 12.6, is_disabled: false }];
+  await rec.runPolls();
+  const changes = rec.spread.slice(2);
+  assert.deepEqual(changes.map((e) => e.values.delta).sort(), [-1, 1]);
+  assert.equal(changes.find((e) => e.values.delta === -1).key, '55.67,12.56', 'the neighbourhood is the identity');
+  checkEvents(src, rec.spread);
 });
 
 test('custom mqtt: extracts numbers from json and plain payloads', () => {
