@@ -24,6 +24,7 @@
     </h1>
     <div class="controls">
       <button id="power" class="power">▶ PLAY</button>
+      <button id="rec" class="rec" aria-pressed="false" title="Record up to a minute: sound + MIDI file">● REC</button>
       <button id="online" class="online" title="See and hear other listeners (peer-to-peer)">○ offline</button>
       <button id="open-settings" class="gear" aria-label="Settings">⚙</button>
     </div>
@@ -33,7 +34,7 @@
       <div id="map"></div>
       <canvas id="roll" aria-hidden="true"></canvas>
       <div class="stage-chips">
-        <button data-view="dk">DK</button><button data-view="nordic">Nordic</button><button data-view="world">World</button>
+        <button data-view="auto" class="on" title="Fit everything the sources that are on are doing">Auto</button><button data-view="dk">DK</button><button data-view="nordic">Nordic</button><button data-view="world">World</button>
         <button id="raw" aria-pressed="false" title="Raw data → MIDI">Raw</button>
       </div>
       <div id="log" class="log" hidden></div>

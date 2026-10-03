@@ -1,0 +1,50 @@
+name: Source stats
+
+# Weekly: open the real site in Chromium on the real network with every source on, record which
+# sources are reachable and how busy they are, commit stats/sources.json, and redeploy.
+on:
+  schedule:
+    - cron: '17 5 * * 1' # Mondays 05:17 UTC
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths: [scripts/source-stats.mjs, .github/workflows/source-stats.yml]
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: source-stats
+  cancel-in-progress: false
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Measure every source for 2 minutes
+        run: node scripts/source-stats.mjs 120
+      - name: Commit stats
+        id: commit
+        run: |
+          git config user.name "datamusak-stats"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add stats/sources.json
+          if git diff --cached --quiet; then echo "changed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          git commit -m "Update source stats"
+          git pull --rebase origin master
+          git push origin HEAD:master
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      # pushes made with GITHUB_TOKEN don't trigger workflows, so ask CI to redeploy explicitly
+      - name: Redeploy the site
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ci.yml --ref master

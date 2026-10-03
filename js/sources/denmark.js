@@ -477,7 +477,7 @@ const aircraft = {
         try {
           const d = await ctx.fetchJSON('https://api.adsb.lol/v2/point/56.0/11.0/250');
           planes = (d.ac || []).map((a) => ({
-            id: a.flight?.trim() || a.hex, lat: a.lat, lon: a.lon,
+            id: a.flight?.trim() || a.hex, hex: a.hex, lat: a.lat, lon: a.lon,
             alt: a.alt_baro === 'ground' ? 0 : num(a.alt_baro), speed: num(a.gs), track: num(a.track), vrate: num(a.baro_rate),
           }));
         } catch (e) {
@@ -487,12 +487,12 @@ const aircraft = {
       if (useOpenSky) {
         const d = await ctx.fetchJSON('https://opensky-network.org/api/states/all?lamin=54.4&lomin=7.5&lamax=58&lomax=15.6');
         planes = (d.states || []).map((s) => ({
-          id: (s[1] || s[0]).trim(), lon: s[5], lat: s[6], alt: (s[7] || 0) * 3.281, speed: (s[9] || 0) * 1.944, track: s[10], vrate: (s[11] || 0) * 196.85,
+          id: (s[1] || s[0]).trim(), hex: s[0], lon: s[5], lat: s[6], alt: (s[7] || 0) * 3.281, speed: (s[9] || 0) * 1.944, track: s[10], vrate: (s[11] || 0) * 196.85,
         }));
       }
       planes = planes.filter((p) => p.lat != null && inDK(p.lat, p.lon)).sort(byLon);
       ctx.spread(
-        planes.map((p) => ({ lat: p.lat, lon: p.lon, key: p.id, label: `✈ ${p.id} ${Math.round(p.alt || 0)} ft`, values: { alt: p.alt, speed: p.speed, track: p.track, vrate: p.vrate } })),
+        planes.map((p) => ({ lat: p.lat, lon: p.lon, key: p.hex || p.id, label: `✈ ${p.id} ${Math.round(p.alt || 0)} ft`, values: { alt: p.alt, speed: p.speed, track: p.track, vrate: p.vrate } })),
         interval,
       );
       return `${planes.length} aircraft${useOpenSky ? ' (OpenSky)' : ''}`;

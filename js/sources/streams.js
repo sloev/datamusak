@@ -86,7 +86,7 @@ const hsl = {
       const v = JSON.parse(payload).VP;
       if (!v || v.lat == null) return;
       ctx.emit({
-        lat: v.lat, lon: v.long, key: String(v.desi), label: `${ctx.options.mode} ${v.desi} ${v.spd} m/s`,
+        lat: v.lat, lon: v.long, key: `${v.oper}/${v.veh}`, label: `${ctx.options.mode} ${v.desi} ${v.spd} m/s`,
         values: { speed: v.spd, heading: v.hdg, delay: -v.dl, accel: v.acc, line: hash(String(v.desi)) },
       });
     });
@@ -147,7 +147,7 @@ const wikipedia = {
       if (wiki !== 'all' && e.wiki !== wiki) return;
       if (e.type !== 'edit' && e.type !== 'new') return;
       const delta = (e.length?.new || 0) - (e.length?.old || 0);
-      ctx.emit({ key: e.title || e.wiki, label: `${e.wiki}: ${delta > 0 ? '+' : ''}${delta} bytes`, values: { delta, size: Math.abs(delta), length: e.length?.new || 0, bot: e.bot ? 1 : 0, namespace: e.namespace } });
+      ctx.emit({ key: e.user || e.title || e.wiki, label: `${e.wiki}: ${delta > 0 ? '+' : ''}${delta} bytes`, values: { delta, size: Math.abs(delta), length: e.length?.new || 0, bot: e.bot ? 1 : 0, namespace: e.namespace } });
     });
   },
 };
@@ -221,7 +221,7 @@ const earthquakes = {
         .map((f) => {
           const [lon, lat, depth] = f.geometry.coordinates;
           const p = f.properties;
-          return { lat, lon, key: p.net || p.place, label: `M${p.mag} ${p.place || ''}`, values: { mag: p.mag, depth: Math.max(0, depth), sig: p.sig, tsunami: p.tsunami } };
+          return { lat, lon, key: (p.place || '').split(', ').pop() || p.net, label: `M${p.mag} ${p.place || ''}`, values: { mag: p.mag, depth: Math.max(0, depth), sig: p.sig, tsunami: p.tsunami } };
         });
       seq.set(items);
       return `${items.length} quakes`;
@@ -314,7 +314,7 @@ const bitcoinTx = {
         if (m.op !== 'utx') return;
         const x = m.x;
         const btc = (x.out || []).reduce((s, o) => s + (o.value || 0), 0) / 1e8;
-        ctx.emit({ key: `out${x.vout_sz}`, label: `tx ${btc.toFixed(4)} BTC`, values: { btc, inputs: x.vin_sz, outputs: x.vout_sz, bytes: x.size } });
+        ctx.emit({ key: x.inputs?.[0]?.prev_out?.addr || x.hash, label: `tx ${btc.toFixed(4)} BTC`, values: { btc, inputs: x.vin_sz, outputs: x.vout_sz, bytes: x.size } });
       },
     });
   },

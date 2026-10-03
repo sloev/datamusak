@@ -10,10 +10,10 @@ const SAMPLES = 'samples-v1';
 
 const PRECACHE = [
   './', 'index.html', 'manifest.webmanifest', 'css/style.css',
-  'assets/icon-192.png', 'assets/map/coast.json',
+  'assets/icon-192.png', 'assets/map/coast.json', 'stats/sources.json',
   'vendor/leaflet.js', 'vendor/leaflet.css', 'vendor/titan-one.woff2',
   'js/main.js', 'js/engine.js', 'js/scales.js', 'js/audio.js', 'js/midi.js', 'js/map.js',
-  'js/viz.js', 'js/state.js', 'js/gm.js', 'js/lazy.js', 'js/instruments.js', 'js/mapping.js', 'js/logo.js', 'js/presence.js', 'js/presets.js',
+  'js/viz.js', 'js/state.js', 'js/gm.js', 'js/lazy.js', 'js/instruments.js', 'js/mapping.js', 'js/logo.js', 'js/presence.js', 'js/presets.js', 'js/recorder.js', 'js/smf.js',
   'js/sources/index.js', 'js/sources/runtime.js', 'js/sources/denmark.js', 'js/sources/streams.js',
   'js/sources/nostr.js', 'js/sources/torrent.js', 'js/sources/p2p.js',
 ];

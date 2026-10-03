@@ -30,6 +30,7 @@ test('source definitions are complete and consistent', () => {
 function checkEvents(src, events, { min = 1, geo = true } = {}) {
   assert.ok(events.length >= min, `${src.id}: expected ≥${min} events, got ${events.length}`);
   for (const ev of events) {
+    if (src.identity) assert.ok(typeof ev.key === 'string' && ev.key.length, `${src.id}: event without an identity key (${src.identity})`);
     const nums = Object.entries(ev.values).filter(([, v]) => v !== undefined);
     assert.ok(nums.length > 0, `${src.id}: event without values`);
     for (const [k, v] of nums) {
@@ -269,7 +270,8 @@ test('coinbase: subscribes and parses matches', () => {
 
 test('bitcoin mempool: parses utx', () => {
   const { src, rec } = push('bitcoin-mempool');
-  rec.ws[0].onMessage(JSON.stringify({ op: 'utx', x: { size: 225, vin_sz: 1, vout_sz: 2, out: [{ value: 150000 }, { value: 2500000 }] } }));
+  rec.ws[0].onMessage(JSON.stringify({ op: 'utx', x: { hash: 'ab12', size: 225, vin_sz: 1, vout_sz: 2, inputs: [{ prev_out: { addr: 'bc1qwallet', value: 2700000 } }], out: [{ value: 150000 }, { value: 2500000 }] } }));
+  assert.equal(rec.emitted[0].key, 'bc1qwallet', 'the sending wallet is the identity');
   assert.equal(rec.emitted[0].values.btc, 0.0265);
   checkEvents(src, rec.emitted, { geo: false });
 });

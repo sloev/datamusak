@@ -10,12 +10,9 @@ test.beforeEach(async ({ page }) => {
 test.afterEach(() => expect(errors, 'uncaught page errors').toEqual([]));
 
 const tile = (page, id) => page.locator(`.tile[data-id="${id}"]`);
-const openSettings = async (page, section) => {
+const openSettings = async (page, tab) => {
   if (!(await page.locator('#sheet').isVisible())) await page.click('#open-settings');
-  if (section) {
-    const s = page.locator(`#sheet details:has(> summary:text-is("${section}"))`);
-    if (!(await s.getAttribute('open').then((v) => v !== null))) await s.locator('> summary').click();
-  }
+  if (tab) await page.locator('#sheet .tabs button', { hasText: tab }).click();
 };
 
 test('loads: logo, play, a tile per source, and the vector map', async ({ page }) => {
@@ -138,6 +135,8 @@ test('tapping a tile switches the source on and off; filters narrow the list', a
 
 test('clicking a source on the map opens its sheet', async ({ page }) => {
   await page.goto('/');
+  await page.click('[data-view="dk"]'); // hold the view still (AUTO keeps refitting)
+  await page.waitForTimeout(300);
   const pt = await page.evaluate(() => {
     const { map, sources } = window.datamusak;
     const p = map.latLngToContainerPoint(sources.find((s) => s.id === 'energinet-grid').home);
@@ -148,41 +147,127 @@ test('clicking a source on the map opens its sheet', async ({ page }) => {
   await expect(page.locator('#sheet h2')).toContainText('Energinet');
 });
 
-test('settings: music, mixer audition, presets save/load/share', async ({ page, context }) => {
+test('settings: one tab at a time, save bar always visible, presets load/share/delete', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/');
   await openSettings(page);
-  await page.locator('#sheet label.row:has-text("Scale") select').selectOption('blues');
-  await openSettings(page, 'Instrument mixer');
-  await page.locator('#sheet .fader button', { hasText: 'Mallets' }).click();
-  await openSettings(page, 'Presets');
-  await page.fill('#sheet input[placeholder="name this setup"]', 'my blues');
-  await page.click('#sheet button.save');
-  await expect(page.locator('#sheet .msg')).toContainText('my blues');
-  await page.locator('#sheet button', { hasText: 'Copy share link' }).click();
-  await expect(page.locator('#sheet .msg')).toContainText('copied');
+  const sheet = page.locator('#sheet');
+  await expect(sheet.locator('.tabs button[aria-selected="true"]')).toHaveText('Music');
+  await sheet.locator('label.row:has-text("Scale") select').selectOption('blues');
+  for (const tab of ['Sound', 'Mixer', 'Presets', 'Recordings', 'MIDI', 'About']) {
+    await openSettings(page, tab);
+    await expect(sheet.locator('.tabs button[aria-selected="true"]')).toHaveText(tab);
+    await expect(sheet.locator('.save-bar')).toBeVisible();
+    await expect(sheet.locator('.panel')).toHaveCount(1);
+  }
+  await openSettings(page, 'Mixer');
+  await sheet.locator('.fader button', { hasText: 'Mallets' }).click();
+
+  // save from the always-visible bar
+  await sheet.locator('.save-bar input').fill('my blues');
+  await sheet.locator('.save-bar .save').click();
+  await expect(sheet.locator('.msg')).toContainText('my blues');
+  await expect(sheet.locator('.tabs button[aria-selected="true"]')).toHaveText('Presets');
+  const mine = sheet.locator('.preset', { hasText: 'my blues' });
+  await mine.locator('button', { hasText: 'Share' }).click();
+  await expect(sheet.locator('.msg')).toContainText('copied');
   const link = await page.evaluate(() => navigator.clipboard.readText());
   expect(link).toMatch(/#p=[\w-]+$/);
 
-  await page.locator('#sheet .preset-load', { hasText: 'Power grid' }).click();
+  // load a built-in, then our own again
+  await sheet.locator('.preset', { hasText: 'Power grid' }).locator('button', { hasText: 'Load' }).click();
   await page.waitForLoadState('load');
-  await openSettings(page);
-  await expect(page.locator('#sheet label.row:has-text("Scale") select')).toHaveValue('dorian');
+  await openSettings(page, 'Music');
+  await expect(sheet.locator('label.row:has-text("Scale") select')).toHaveValue('dorian');
   await expect(tile(page, 'elpris')).toHaveClass(/on/);
   await openSettings(page, 'Presets');
-  await page.locator('#sheet .preset-load', { hasText: 'my blues' }).click();
+  await sheet.locator('.preset', { hasText: 'my blues' }).locator('button', { hasText: 'Load' }).click();
   await page.waitForLoadState('load');
-  await openSettings(page);
-  await expect(page.locator('#sheet label.row:has-text("Scale") select')).toHaveValue('blues');
+  await openSettings(page, 'Music');
+  await expect(sheet.locator('label.row:has-text("Scale") select')).toHaveValue('blues');
 
+  // delete
+  await openSettings(page, 'Presets');
+  page.once('dialog', (d) => d.accept());
+  await sheet.locator('.preset', { hasText: 'my blues' }).locator('button', { hasText: 'Delete' }).click();
+  await expect(sheet.locator('.preset', { hasText: 'my blues' })).toHaveCount(0);
+
+  // the share link opens the setup in a fresh browser
   const fresh = await context.browser().newContext({ reducedMotion: 'reduce', serviceWorkers: 'block' });
   const p2 = await fresh.newPage();
   await mockNetwork(p2);
   await p2.goto(link.replace(/^https?:\/\/[^/]+/, 'http://localhost:8123'));
   await expect(p2.locator('#sheet .msg')).toContainText('Loaded the preset');
+  await p2.locator('#sheet .tabs button', { hasText: 'Music' }).click();
   await expect(p2.locator('#sheet label.row:has-text("Scale") select')).toHaveValue('blues');
   expect(new URL(p2.url()).hash).toBe('');
   await fresh.close();
+});
+
+test('recording: sound + MIDI file, listed with play/download/delete', async ({ page }) => {
+  await page.goto('/');
+  await onlySources(page, ['random-walk']);
+  await page.click('#rec'); // starts playback too
+  await expect(page.locator('#power')).toHaveText('■ STOP');
+  await expect(page.locator('#rec')).toHaveText(/■ 0:\d\d/);
+  await page.waitForTimeout(2500);
+  await page.click('#rec');
+  const sheet = page.locator('#sheet');
+  await expect(sheet.locator('.tabs button[aria-selected="true"]')).toHaveText('Recordings');
+  const rec = sheet.locator('.recording').first();
+  await expect(rec).toBeVisible();
+  await expect(rec).toContainText('notes');
+  const midiDl = page.waitForEvent('download');
+  await rec.locator('button', { hasText: 'MIDI' }).click();
+  const midiFile = await (await midiDl).path();
+  const bytes = (await import('node:fs')).readFileSync(midiFile);
+  expect(bytes.subarray(0, 4).toString()).toBe('MThd');
+  const noteOns = [...bytes].filter((b, i) => (b & 0xf0) === 0x90 && i > 22).length;
+  expect(noteOns).toBeGreaterThan(3);
+  const soundDl = page.waitForEvent('download');
+  await rec.locator('button', { hasText: 'Sound' }).click();
+  expect((await soundDl).suggestedFilename()).toMatch(/^datamusak-\d{8}-\d{6}\.(webm|ogg|m4a)$/);
+  await rec.locator('button', { hasText: 'Delete' }).click();
+  await expect(sheet.locator('.recording')).toHaveCount(0);
+});
+
+test('raw log toggles on and off on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 760 });
+  await page.goto('/');
+  await page.click('#raw');
+  await expect(page.locator('#log')).toBeVisible();
+  await page.click('#raw');
+  await expect(page.locator('#log')).toBeHidden();
+});
+
+test('map AUTO view fits what the enabled sources do; panning switches to manual', async ({ page }) => {
+  await page.goto('/');
+  await onlySources(page, ['usgs']);
+  await page.click('#power');
+  await expect(page.locator('[data-view="auto"]')).toHaveClass(/on/);
+  // world-wide earthquakes → the auto view zooms out to the world
+  await expect.poll(() => page.evaluate(() => window.datamusak.map.getZoom()), { timeout: 15000 }).toBeLessThan(5);
+  const box = await page.locator('#map').boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 3);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 3 + 40, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.locator('[data-view="auto"]')).not.toHaveClass(/on/);
+  await page.click('[data-view="auto"]');
+  await expect(page.locator('[data-view="auto"]')).toHaveClass(/on/);
+});
+
+test('tiles are sorted by measured reachability and activity; sheets name the identity', async ({ page }) => {
+  await page.route('**/stats/sources.json', (r) =>
+    r.fulfill({ contentType: 'application/json', body: JSON.stringify({ sources: { ais: { status: 'ok', eventsPerMin: 900 }, wikipedia: { status: 'ok', eventsPerMin: 300 }, 'energinet-co2': { status: 'error', eventsPerMin: 0 } } }) }));
+  await page.goto('/');
+  await expect.poll(() => page.locator('.tile').first().getAttribute('data-id')).toBe('ais');
+  const ids = await page.locator('.tile').evaluateAll((els) => els.map((e) => e.dataset.id));
+  expect(ids.indexOf('wikipedia')).toBe(1);
+  expect(ids.indexOf('energinet-co2')).toBe(ids.length - 1);
+  await expect(tile(page, 'energinet-co2').locator('.tile-sub')).toContainText('down');
+  await tile(page, 'ais').locator('.tile-more').click();
+  await expect(page.locator('#sheet')).toContainText('Each ship (MMSI) always gets its own instrument');
 });
 
 test('online button joins and leaves the listener room, and is remembered', async ({ page }) => {

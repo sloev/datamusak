@@ -27,11 +27,11 @@ export const presence = {
       const action = room.makeAction('note');
       shareNote = (data) => action.send(data);
       const count = () => (presence.peers = Object.keys(room.getPeers()).length);
-      room.onPeerJoin = () => emit({ type: 'join', peers: count() });
-      room.onPeerLeave = () => emit({ type: 'leave', peers: count() });
-      action.onMessage = (note) => {
+      room.onPeerJoin = (peerId) => emit({ type: 'join', peers: count(), peerId });
+      room.onPeerLeave = (peerId) => emit({ type: 'leave', peers: count(), peerId });
+      action.onMessage = (note, meta) => {
         if (!note || !Number.isFinite(note.n)) return;
-        emit({ type: 'note', peers: presence.peers, note });
+        emit({ type: 'note', peers: presence.peers, note, peerId: meta?.peerId });
       };
       emit({ type: 'count', peers: count() });
       joining = null;
