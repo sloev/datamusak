@@ -15,6 +15,7 @@ Mapping is **deterministic**: the same data always makes the same sound. Nothing
 - **Identity → instrument and register.** Every event carries the most individual identifier its data has: a ship's MMSI, an aircraft's transponder code, a weather station, a Wikipedia editor, a Nostr author, a sending Bitcoin wallet, a Helsinki tram, a listener's peer id, and so on. The identity picks the instrument from the source's instrument families, plus its own transposition, so ten stations sound like ten different players.
 - **Value → melody.** The melody field walks the chosen scale in fine steps (by default the field's physical range in 36 steps). At the edge of the register it bounces back instead of jumping, so small changes like 12.1 → 12.9 °C still move the tune.
 - **Other fields → fixed ranges.** Loudness, note length (snapped to musical lengths), left/right and brightness come from fixed physical ranges.
+- **The original sounds:** instruments use Radio Nabovarme's own WebAudioFont sample sets where it had them: the JCLive drum kit, FluidR3 marimba, music box and pan flute, GeneralUserGS fretless bass, and SBLive glockenspiel and electric piano. Everything else prefers the same sound fonts (FluidR3 → GeneralUserGS → SBLive → JCLive → Chaos → Aspirin).
 - **Instruments:** each source plays from instrument families: the 16 General MIDI families (Piano, Mallets, Organ, Guitar, Bass, Strings, Ensemble, Brass, Reed, Pipe, Synth lead/pad/FX, Ethnic, Percussive, Sound FX) plus a drum kit, or **ALL 128**. Sounds load on demand and are cached. A mixer sets the level of each family across all sources.
 
 ## Features
@@ -146,7 +147,7 @@ manifest.webmanifest
 assets/               logo.png + app icons (rendered by the logo shader), map/coast.json (vector coastlines)
 vendor/               self-hosted Leaflet, mqtt.js, WebTorrent, Trystero, WebAudioFont player, Titan One
 js/main.js            UI wiring
-js/logo.js            the WebGL logo (3D bubble letters, plasma, checkerboards, copper bars, glitch)
+scripts/logo-shader.js the WebGL logo renderer (3D bubble letters, plasma, checkerboards, copper bars, glitch); npm run logo bakes its 45-frame loop into assets/logo.webm/.mp4
 js/engine.js          data event → deterministic voice (instrument, note, loudness, length, pan) → audio + MIDI
 js/mapping.js         the deterministic mapping maths (identity hash, scale walk with fold, ranges)
 js/instruments.js     General MIDI families + drum kit

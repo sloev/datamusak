@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import { SOURCES, SOURCE_BY_ID } from '../../js/sources/index.js';
 import { loadState } from '../../js/state.js';
 import { snapshot, applySnapshot, encode, decode, presetFromHash, BUILTIN } from '../../js/presets.js';
-import { layout, frameUniforms } from '../../js/logo.js';
+import { layout, frameUniforms } from '../../scripts/logo-shader.js';
 import { presence } from '../../js/presence.js';
 import { fakeCtx } from './fake-ctx.js';
 

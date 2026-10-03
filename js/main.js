@@ -8,7 +8,6 @@ import { MidiOut } from './midi.js';
 import { Engine } from './engine.js';
 import { SoundMap } from './map.js';
 import { PianoRoll, EventLog } from './viz.js';
-import { mountLogo } from './logo.js';
 import { Recorder, MAX_SECONDS, listRecordings, deleteRecording, fileName } from './recorder.js';
 import { presence } from './presence.js';
 import { BUILTIN, snapshot, applySnapshot, shareUrl, decode, presetFromHash, localPresets, saveLocalPreset, deleteLocalPreset } from './presets.js';
@@ -101,12 +100,13 @@ $('#raw').onclick = () => {
 
 // ------------------------------------------------------------------ logo
 
-const logo = mountLogo($('#logo'), { still: matchMedia('(prefers-reduced-motion: reduce)').matches });
-if (!logo) {
-  $('#logo').hidden = true;
-  $('#logo-fallback').src = 'assets/logo.png';
-  $('#logo-fallback').hidden = false;
-}
+// The logo is a looping video (pre-rendered from the WebGL shader in scripts/logo-shader.js), so it moves on
+// every device. If autoplay was refused (e.g. battery saver), start it on the first tap.
+const logo = $('#logo');
+const kick = () => logo.paused && logo.play().catch(() => {});
+logo.play?.().catch(() => {});
+addEventListener('pointerdown', kick, { once: true });
+document.addEventListener('visibilitychange', () => !document.hidden && kick());
 const beatVar = () => document.documentElement.style.setProperty('--beat', `${60 / state.global.bpm}s`);
 beatVar();
 
@@ -180,7 +180,6 @@ const stopRecording = () => recorder.stop();
 $('#power').onclick = async () => {
   powered = !powered;
   glitch();
-  logo?.glitch();
   $('#power').textContent = powered ? '■ STOP' : '▶ PLAY';
   $('#power').classList.toggle('on', powered);
   if (powered) {
@@ -230,13 +229,16 @@ function rank(src) {
 }
 function sorted(list) {
   const r = new Map(list.map((s) => [s.id, rank(s)]));
-  return [...list].sort((a, b) => r.get(b.id)[0] - r.get(a.id)[0] || r.get(b.id)[1] - r.get(a.id)[1]);
+  // your own broker and the test signal aren't "data from the world": always last
+  const last = (src) => (src.group === 'Custom' ? 1 : 0);
+  return [...list].sort((a, b) => last(a) - last(b) || r.get(b.id)[0] - r.get(a.id)[0] || r.get(b.id)[1] - r.get(a.id)[1]);
 }
+const perMin = (n) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : n < 10 ? String(n) : String(Math.round(n)));
 const offLabel = (src) => {
   const w = weekly[src.id];
   if (!w) return 'off';
   if (w.status === 'error') return 'off · was down';
-  return w.eventsPerMin ? `off · ~${w.eventsPerMin < 10 ? w.eventsPerMin : Math.round(w.eventsPerMin)}/min` : 'off';
+  return w.eventsPerMin ? `off · ~${perMin(w.eventsPerMin)}/min` : 'off';
 };
 
 function renderTiles() {
@@ -247,7 +249,7 @@ function renderTiles() {
       fillTile(el, src);
       return el;
     }),
-    list.length ? null : h('p', { class: 'empty' }, filter === 'On' ? 'Nothing is on yet — tap a source to switch it on.' : 'No sources here.'),
+    ...(list.length ? [] : [h('p', { class: 'empty' }, filter === 'On' ? 'Nothing is on yet — tap a source to switch it on.' : 'No sources here.')]),
   );
 }
 function fillTile(el, src) {
@@ -259,7 +261,7 @@ function fillTile(el, src) {
     h('button', { class: 'tile-main', 'aria-pressed': String(cfg.enabled), title: cfg.enabled ? 'Switch off' : 'Switch on', onclick: () => setEnabled(src, !cfg.enabled) },
       h('span', { class: 'sticker' }),
       h('span', { class: 'tile-name' }, src.short || src.name),
-      h('span', { class: 'tile-sub' }, h('span', { class: 'status ' + st.kind }), cfg.enabled ? (rate ? `${rate}/min` : st.kind === 'error' ? 'unreachable' : powered ? 'listening…' : 'on') : offLabel(src)),
+      h('span', { class: 'tile-sub' }, h('span', { class: 'status ' + st.kind }), cfg.enabled ? (rate ? `${perMin(rate)}/min` : st.kind === 'error' ? 'unreachable' : powered ? 'listening…' : 'on') : offLabel(src)),
       h('span', { class: 'meter', style: `--m:${Math.min(1, rate / 120)}` })),
     h('button', { class: 'tile-more', 'aria-label': `Settings for ${src.name}`, onclick: () => openSource(src.id) }, '⋯'),
   );
@@ -477,6 +479,35 @@ $('#online').onclick = async () => {
   renderOnline();
 };
 if (state.global.online) setTimeout(() => presence.join().then(renderOnline).catch(renderOnline), 1500);
+
+// ---------------------------------------------------------------- footer
+
+$('#made-with').textContent = [...'💖💘💜🧡💛💚💙✨🌈🦄🍩🪐🔥👾🎉🍄🌀🚀🛸🎨🐙🦖🍭💾🕹️🪩🎛️📡🎧🛰️'][Math.floor(Math.random() * 30)] || '🍄';
+// PWA install: Chromium offers a prompt event; iOS needs the Share-sheet route.
+let installPrompt = null;
+const installed = () => matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches || navigator.standalone === true;
+const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  if (!installed()) $('#install').hidden = false;
+});
+addEventListener('appinstalled', () => {
+  installPrompt = null;
+  $('#install').hidden = true;
+  $('#install-hint').hidden = true;
+});
+if (!installed() && ios) $('#install').hidden = false;
+$('#install').onclick = async () => {
+  if (installPrompt) {
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') $('#install').hidden = true;
+    installPrompt = null;
+  } else {
+    $('#install-hint').hidden = false;
+  }
+};
 
 // ------------------------------------------------------------------ boot
 

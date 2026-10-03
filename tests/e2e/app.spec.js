@@ -15,6 +15,28 @@ const openSettings = async (page, tab) => {
   if (tab) await page.locator('#sheet .tabs button', { hasText: tab }).click();
 };
 
+test('the logo is a looping video and the footer has the donate button', async ({ page }) => {
+  await page.goto('/');
+  const logo = page.locator('video#logo');
+  for (const attr of ['autoplay', 'loop', 'muted', 'playsinline']) await expect(logo).toHaveAttribute(attr, '');
+  await expect.poll(() => logo.evaluate((v) => v.currentTime), { timeout: 5000 }).toBeGreaterThan(0.2);
+  await expect(page.locator('.foot a.coffee')).toHaveAttribute('href', 'https://www.buymeacoffee.com/sloev');
+  await expect(page.locator('#made-with')).not.toBeEmpty();
+});
+
+test('instruments load Radio Nabovarme’s original sample sets', async ({ page }) => {
+  const urls = [];
+  page.on('request', (r) => r.url().includes('webaudiofontdata') && urls.push(r.url().split('/').pop()));
+  await page.goto('/');
+  await page.click('#open-settings');
+  await page.locator('#sheet .tabs button', { hasText: 'Mixer' }).click();
+  await page.locator('#sheet .fader button', { hasText: 'Mallets' }).click(); // program 8… → mallets family
+  await page.locator('#sheet .fader button', { hasText: 'Drums' }).click();
+  await expect.poll(() => urls.length).toBeGreaterThan(5);
+  expect(urls).toContain('12835_17_JCLive_sf2_file.js');
+  expect(urls.some((u) => u.endsWith('_FluidR3_GM_sf2_file.js') || u.endsWith('_SBLive_sf2.js') || u.endsWith('_GeneralUserGS_sf2_file.js'))).toBe(true);
+});
+
 test('loads: logo, play, a tile per source, and the vector map', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveTitle('datamusak');
@@ -264,7 +286,9 @@ test('tiles are sorted by measured reachability and activity; sheets name the id
   await expect.poll(() => page.locator('.tile').first().getAttribute('data-id')).toBe('ais');
   const ids = await page.locator('.tile').evaluateAll((els) => els.map((e) => e.dataset.id));
   expect(ids.indexOf('wikipedia')).toBe(1);
-  expect(ids.indexOf('energinet-co2')).toBe(ids.length - 1);
+  // custom broker + test signal always sit at the very end; before them, the unreachable source
+  expect(ids.slice(-2).sort()).toEqual(['custom-mqtt', 'random-walk']);
+  expect(ids.indexOf('energinet-co2')).toBe(ids.length - 3);
   await expect(tile(page, 'energinet-co2').locator('.tile-sub')).toContainText('down');
   await tile(page, 'ais').locator('.tile-more').click();
   await expect(page.locator('#sheet')).toContainText('Each ship (MMSI) always gets its own instrument');

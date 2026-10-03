@@ -195,7 +195,7 @@ const dmiWeather = {
       const stations = new Map();
       const results = await Promise.allSettled(
         Object.keys(MET_PARAMS).map((p) =>
-          ctx.fetchJSON(`${DMI}/metObs/collections/observation/items?period=latest&parameterId=${p}&bbox=${DK_BBOX}&limit=1000`),
+          ctx.fetchJSON(`${DMI}/metObs/collections/observation/items?period=latest-10-minutes&parameterId=${p}&bbox=${DK_BBOX}&sortorder=observed,DESC&limit=3000`),
         ),
       );
       const ok = results.filter((r) => r.status === 'fulfilled');
@@ -206,7 +206,7 @@ const dmiWeather = {
           const [lon, lat] = f.geometry.coordinates;
           let s = stations.get(stationId);
           if (!s) stations.set(stationId, (s = { lat, lon, key: stationId, label: `station ${stationId}`, values: {} }));
-          s.values[MET_PARAMS[parameterId]] = value;
+          s.values[MET_PARAMS[parameterId]] ??= value; // newest first: keep the latest reading
         }
       }
       const items = [...stations.values()].sort(byLon);
@@ -275,7 +275,7 @@ const dmiOcean = {
   start(ctx) {
     const seq = ctx.sequence(2);
     ctx.poll(10 * 60000, async () => {
-      const get = (p) => ctx.fetchJSON(`${DMI}/oceanObs/collections/observation/items?period=latest&parameterId=${p}&bbox=${DK_BBOX}&limit=1000`);
+      const get = (p) => ctx.fetchJSON(`${DMI}/oceanObs/collections/observation/items?period=latest-hour&parameterId=${p}&bbox=${DK_BBOX}&sortorder=observed,DESC&limit=3000`);
       const [lev, tw] = await Promise.allSettled([get('sealev_dvr'), get('tw')]);
       if (lev.status !== 'fulfilled') throw lev.reason;
       const st = new Map();
@@ -285,7 +285,7 @@ const dmiOcean = {
           const [lon, lat] = f.geometry.coordinates;
           const id = f.properties.stationId;
           if (!st.has(id)) st.set(id, { lat, lon, key: id, label: `tide gauge ${id}`, values: { angle: Math.atan2(lat - 56, lon - 10.6) } });
-          st.get(id).values[key] = f.properties.value;
+          st.get(id).values[key] ??= f.properties.value;
         }
       }
       const items = [...st.values()].filter((s) => s.values.level !== undefined).sort((a, b) => a.values.angle - b.values.angle);

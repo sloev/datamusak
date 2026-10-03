@@ -79,7 +79,7 @@ input[type='checkbox']:checked::after { content: '✓'; font: 13px/1 var(--displ
 }
 @keyframes zz { to { background-position: -22px 0; } }
 .hero { margin: 0; line-height: 0; flex: 1 1 360px; max-width: 600px; }
-.hero canvas, .hero img { width: 100%; height: auto; aspect-ratio: 800 / 220; display: block; }
+.hero video { width: 100%; height: auto; aspect-ratio: 800 / 220; display: block; background: var(--black); object-fit: contain; }
 .controls { display: flex; align-items: center; gap: 12px; }
 .power { font-size: clamp(16px, 2.4vw, 22px); padding: 12px 24px; border: 0; color: var(--ink); background: var(--ye); --sh: var(--pk); }
 .power:hover { color: var(--ink); }
@@ -239,6 +239,31 @@ details.more > :not(summary) { margin-top: 12px; }
 .fader { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
 .fader .fam { justify-self: start; padding: 5px 8px; font-size: 10px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .fader .mute { display: flex; align-items: center; gap: 4px; font-size: 11px; }
+
+/* ---------- footer: donate + install, like gifshooter ---------- */
+.foot { position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 26px var(--gap) calc(22px + env(safe-area-inset-bottom)); text-align: center; }
+.foot::before { /* yellow zigzag divider, scrolling the other way */
+  content: ''; position: absolute; left: 0; right: 0; top: 4px; height: 8px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='8'%3E%3Cpath d='M0 6.5 5.5 1.5 11 6.5 16.5 1.5 22 6.5' fill='none' stroke='%23ffe61a' stroke-width='2.5'/%3E%3C/svg%3E") 0 0 / 22px 8px repeat-x;
+  animation: zz 1.47s steps(22) infinite reverse;
+}
+.foot-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; }
+.coffee, .install, .foot-link {
+  font: 400 15px/1 var(--display); text-transform: uppercase; letter-spacing: -0.02em; text-decoration: none;
+  padding: 13px 20px; border-radius: 999px; display: inline-flex; align-items: center; gap: 8px;
+}
+.coffee { position: relative; overflow: hidden; isolation: isolate; color: var(--ink); background: var(--ye); box-shadow: 0 0 0 2px var(--ink), 5px 5px 0 2px var(--pk); animation: wiggle calc(var(--beat) * 4) steps(1) infinite; }
+.coffee::before { content: ''; position: absolute; inset: 0 0 52% 0; background: var(--chrome); z-index: -1; }
+.coffee::after { content: ''; position: absolute; left: 9%; top: 14%; width: 16px; height: 6px; border-radius: 50%; background: #fff; z-index: -1; }
+.coffee:hover { color: var(--ink); animation: flip-x 0.8s steps(12); }
+@keyframes wiggle { 0%, 80% { rotate: -2deg; } 85% { rotate: 3deg; scale: 1.08; } 90% { rotate: -3deg; } 95% { rotate: 2deg; scale: 1.04; } }
+@keyframes flip-x { to { transform: perspective(300px) rotateY(360deg); } }
+.install { color: var(--ink); background: var(--mi); border: 0; box-shadow: 0 0 0 2px var(--ink), 5px 5px 0 2px var(--vi); }
+.install:hover { color: var(--ink); }
+.foot-link { color: var(--white); border: 2px solid var(--white); }
+.foot-link:hover { color: var(--li); border-color: var(--li); }
+.fine { margin: 0; font-size: 12px; }
+#made-with { display: inline-block; animation: beat var(--beat) steps(6) infinite; }
 
 /* ---------- VHS glitch: RGB split + row tears, ~a quarter second, only on interaction ---------- */
 body.glitching .top, body.glitching .app, body.glitching .sheet-body { animation: vhs 0.26s steps(1) both; }
