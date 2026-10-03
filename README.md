@@ -12,7 +12,7 @@ It's a static site with no server and no build step. It is also an installable P
 
 Mapping is **deterministic**: the same data always makes the same sound. Nothing is random, and nothing "learns" ranges.
 
-- **Identity → instrument and register.** Every event carries an identity: a weather station, ship, aircraft, author, topic, cable and so on. The identity picks the instrument from the source's instrument families, plus its own transposition, so ten stations sound like ten different players.
+- **Identity → instrument and register.** Every event carries the most individual identifier its data has: a ship's MMSI, an aircraft's transponder code, a weather station, a Wikipedia editor, a Nostr author, a sending Bitcoin wallet, a Helsinki tram, a listener's peer id, and so on. The identity picks the instrument from the source's instrument families, plus its own transposition, so ten stations sound like ten different players.
 - **Value → melody.** The melody field walks the chosen scale in fine steps (by default the field's physical range in 36 steps). At the edge of the register it bounces back instead of jumping, so small changes like 12.1 → 12.9 °C still move the tune.
 - **Other fields → fixed ranges.** Loudness, note length (snapped to musical lengths), left/right and brightness come from fixed physical ranges.
 - **Instruments:** each source plays from instrument families: the 16 General MIDI families (Piano, Mallets, Organ, Guitar, Bass, Strings, Ensemble, Brass, Reed, Pipe, Synth lead/pad/FX, Ethnic, Percussive, Sound FX) plus a drum kit, or **ALL 128**. Sounds load on demand and are cached. A mixer sets the level of each family across all sources.
@@ -20,8 +20,11 @@ Mapping is **deterministic**: the same data always makes the same sound. Nothing
 ## Features
 
 - **27 live sources**, each a tile. Tap to switch it on; tap ⋯ to choose its instrument families, range (low/mid/high/wide), volume, how busy it may be, and (folded away) which data field drives what.
-- **Settings** (⚙): key, 22 scales, tempo, grid, reverb/echo/brightness, the instrument mixer, presets, MIDI out.
-- **Presets**: save in the browser, start from built-ins, or **share a link** with the whole setup (`#p=…`).
+- **Settings** (⚙): one tab at a time (Music, Sound, Mixer, Presets, Recordings, MIDI, About), with **Save** always on top.
+- **Presets**: save in the browser, start from built-ins, and load, share (as a link with the whole setup, `#p=…`) or delete each one.
+- **Recording** (● REC): up to a minute of what you hear plus a **MIDI file** of every note. Recordings stay in your browser and can be played, downloaded or shared.
+- **Map**: AUTO keeps a bounding box around everything the enabled sources are doing; DK / Nordic / World are fixed views. Raw shows the data → MIDI log.
+- **Tiles are sorted** by how reachable and busy each source is: what your browser sees right now, else last week's measurement.
 - **Online**: a peer-to-peer room counts listeners and passes notes between you.
 - **Web MIDI out**: each source on its own channel, with program changes; drums on channel 10.
 - **Map**: our own vector coastlines from Natural Earth (Denmark at 1:10m), with no tile server and no API key.
@@ -58,6 +61,10 @@ Mapping is **deterministic**: the same data always makes the same sound. Nothing
 | gifshooter painters (strokes drawn over a map of Denmark) | WebRTC (Trystero/Nostr) | peers |
 | Custom MQTT broker + topic (default: public Mosquitto test broker) | MQTT/WSS | anywhere |
 | Offline random walk (for testing) | — | — |
+
+### Reachability, measured weekly
+
+`.github/workflows/source-stats.yml` opens the real site in Chromium every Monday, switches every source on for two minutes, and commits [`stats/sources.json`](stats/sources.json): each source's status, last message and events per minute. Real browsers hit CORS, blocked hosts and dead APIs; this records which sources actually work. The app sorts its tiles by these numbers. Run it any time from the Actions tab, or locally with `node scripts/source-stats.mjs 120`.
 
 Slow data (prices, weather, the grid) plays as a looping step sequence over the latest values, synced to the BPM, so the music changes as new data arrives. Fast streams trigger notes directly and are thinned out by each source's *max notes/s*.
 
@@ -149,6 +156,8 @@ js/midi.js            Web MIDI output
 js/map.js             vector coastline map (no tiles, no key), source homes, event pulses
 js/viz.js             piano roll and raw log
 js/presets.js         snapshots, built-in presets, share links
+js/recorder.js        recording (MediaRecorder + IndexedDB), js/smf.js writes the MIDI file
+stats/sources.json    weekly measured reachability/activity (scripts/source-stats.mjs)
 js/presence.js        peer-to-peer "online" room
 js/state.js           defaults and localStorage persistence
 js/lazy.js            on-demand loading of the heavy libraries

@@ -6,11 +6,25 @@ const VIEWS = {
   world: { center: [30, 10], zoom: 2 },
 };
 
+const RECENT_MS = 90000;
+
 export class SoundMap {
-  constructor(el, sources, { onSelect }) {
+  constructor(el, sources, { onSelect, onViewChange = () => {} }) {
     this.map = L.map(el, { zoomControl: false, worldCopyJump: true, preferCanvas: true });
     L.control.zoom({ position: 'bottomleft' }).addTo(this.map);
-    this.view('dk');
+    this.sources = sources;
+    this.enabled = new Set();
+    this.recent = []; // [lat, lon, sourceId, time] of recent events
+    this.onViewChange = onViewChange;
+    this.current = 'auto';
+    this.map.setView(VIEWS.dk.center, VIEWS.dk.zoom);
+    // AUTO: keep every recent event of the sources that are on in view; any manual pan/zoom ends it
+    this.map.on('dragstart', () => this.view('manual'));
+    el.addEventListener('wheel', () => this.view('manual'), { passive: true });
+    el.addEventListener('dblclick', () => this.view('manual'));
+    el.addEventListener('touchstart', (e) => e.touches.length > 1 && this.view('manual'), { passive: true });
+    el.querySelector('.leaflet-control-zoom')?.addEventListener('click', () => this.view('manual'));
+    setInterval(() => this.fit(), 4000);
     this.map.attributionControl.addAttribution('Coastlines: <a href="https://www.naturalearthdata.com/">Natural Earth</a>');
     // coastlines get their own canvas, so the animated pulses never force them to redraw
     const coastPane = this.map.createPane('coast');
@@ -49,12 +63,36 @@ export class SoundMap {
     } catch {}
   }
 
+  // 'auto' | 'dk' | 'nordic' | 'world' | 'manual'
   view(name) {
-    const v = VIEWS[name];
-    this.map.setView(v.center, v.zoom);
+    if (this.current === name && name !== 'auto') return;
+    this.current = name;
+    if (VIEWS[name]) this.map.setView(VIEWS[name].center, VIEWS[name].zoom);
+    if (name === 'auto') this.fit(true);
+    this.onViewChange(name);
+  }
+
+  // The bounding box of what the enabled sources have been doing lately (or their home pins).
+  autoBounds(now = performance.now()) {
+    this.recent = this.recent.filter((r) => now - r[3] < RECENT_MS);
+    const pts = this.recent.filter((r) => this.enabled.has(r[2])).map((r) => [r[0], r[1]]);
+    for (const src of this.sources) if (this.enabled.has(src.id)) pts.push(src.home);
+    return pts.length ? L.latLngBounds(pts) : L.latLngBounds([[54.5, 8], [57.8, 15.2]]);
+  }
+
+  fit(force = false) {
+    if (this.current !== 'auto') return;
+    const b = this.autoBounds();
+    const view = this.map.getBounds();
+    // leave the view alone if it already shows everything and isn't much too big
+    if (!force && view.contains(b) && this.map.getBoundsZoom(b.pad(0.15)) - this.map.getZoom() < 1.5) return;
+    this.fitting = true;
+    this.map.fitBounds(b.pad(0.15), { maxZoom: 9, animate: true, duration: 0.6 });
+    this.map.once('moveend', () => (this.fitting = false));
   }
 
   setEnabled(id, enabled) {
+    enabled ? this.enabled.add(id) : this.enabled.delete(id);
     this.homes[id]?.setStyle({ fillOpacity: enabled ? 1 : 0.25, opacity: enabled ? 1 : 0.4, radius: enabled ? 9 : 6 });
   }
 
@@ -62,6 +100,8 @@ export class SoundMap {
   // Events that didn't play: a small dot that blinks once. No fades — no muddy midtones.
   pulse(src, ev, notes) {
     const pos = ev.lat != null ? [ev.lat, ev.lon] : src.home;
+    if (ev.lat != null) this.recent.push([ev.lat, ev.lon, src.id, performance.now()]);
+    if (this.recent.length > 2000) this.recent.splice(0, 500);
     const played = notes.length > 0;
     const vel = played ? notes[0].velocity / 127 : 0;
     const r = played ? 5 + vel * 12 : 2.5;

@@ -26,11 +26,11 @@ const listeners = {
       if (e.type === 'count') ctx.status('ok', `${e.peers} other listener${e.peers === 1 ? '' : 's'}`);
       if (e.type === 'join' || e.type === 'leave') {
         ctx.status('ok', `${e.peers} other listener${e.peers === 1 ? '' : 's'}`);
-        ctx.emit({ key: e.type, label: e.type === 'join' ? '👋 someone joined' : '👋 someone left', values: { peers: e.peers, arrival: e.type === 'join' ? 1 : -1, note: e.type === 'join' ? 84 : 48, velocity: 90 } });
+        ctx.emit({ key: e.peerId || e.type, label: e.type === 'join' ? '👋 someone joined' : '👋 someone left', values: { peers: e.peers, arrival: e.type === 'join' ? 1 : -1, note: e.type === 'join' ? 84 : 48, velocity: 90 } });
       }
       if (e.type === 'note') {
         const n = e.note;
-        ctx.emit({ key: String(n.s || ''), label: `peer note ${n.n}`, values: { note: n.n, velocity: n.v, length: n.d, peers: e.peers, arrival: 0, source: hash(String(n.s || '')) } });
+        ctx.emit({ key: e.peerId || String(n.s || ''), label: `peer note ${n.n}`, values: { note: n.n, velocity: n.v, length: n.d, peers: e.peers, arrival: 0, source: hash(String(n.s || '')) } });
       }
     });
     ctx.onStop(off);
@@ -90,7 +90,7 @@ const gifshooter = {
       ctx.emit({
         lat: 57.75 - m.y * 3.3,
         lon: 8.1 + m.x * 7.0,
-        key: `${peerId}|${m.s ?? ''}`,
+        key: peerId,
         label: `🖌 painter ${String(peerId).slice(0, 4)} ${m.s ?? ''}`,
         values: { x: m.x, y: 1 - m.y, speed, gif: hash(String(m.s ?? '')), hue: Number.isFinite(m.h) ? m.h : undefined, painters: last.size },
       });

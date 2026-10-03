@@ -129,10 +129,13 @@ const zaps = {
       const sats = bolt11Sats(tag(ev, 'bolt11'));
       if (!sats) return;
       let comment = 0;
+      let zapper = '';
       try {
-        comment = (JSON.parse(tag(ev, 'description') || '{}').content || '').length;
+        const req = JSON.parse(tag(ev, 'description') || '{}');
+        comment = (req.content || '').length;
+        zapper = req.pubkey || '';
       } catch {}
-      ctx.emit({ key: tag(ev, 'p'), label: `⚡ ${sats} sats`, values: { sats, comment, recipient: hash(tag(ev, 'p') || '') } });
+      ctx.emit({ key: zapper || tag(ev, 'p'), label: `⚡ ${sats} sats`, values: { sats, comment, recipient: hash(tag(ev, 'p') || '') } });
     });
   },
 };
@@ -155,7 +158,7 @@ const firehose = {
   defaults: { pitch: 'bytes', velocity: 'bytes', duration: 'tags', bright: 'reaction', families: ['drums', 'percussive', 'sfx'], register: 'wide', rate: 8 },
   start(ctx) {
     subscribe(ctx, {}, (ev) => {
-      ctx.emit({ key: `kind${ev.kind}`, label: `kind ${ev.kind}`, values: { kind: ev.kind, bytes: JSON.stringify(ev).length, tags: (ev.tags || []).length, reaction: ev.kind === 7 ? 1 : 0 } });
+      ctx.emit({ key: ev.pubkey || `kind${ev.kind}`, label: `kind ${ev.kind}`, values: { kind: ev.kind, bytes: JSON.stringify(ev).length, tags: (ev.tags || []).length, reaction: ev.kind === 7 ? 1 : 0 } });
     });
   },
 };

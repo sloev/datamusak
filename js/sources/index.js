@@ -21,6 +21,16 @@ const SHORT = {
   webtorrent: 'WebTorrent', listeners: 'Listeners', gifshooter: 'gifshooter', 'custom-mqtt': 'Custom MQTT', 'random-walk': 'Test signal',
 };
 
+// What gets its own instrument (the event identity), in plain words.
+const IDENTITY = {
+  'energinet-grid': 'cable or power plant', 'energinet-co2': null, elpris: 'price area (DK1/DK2)', 'dmi-weather': 'weather station',
+  'dmi-lightning': 'kind of strike', 'dmi-ocean': 'tide gauge', 'open-meteo': 'town', 'sensor-community': 'sensor',
+  bikeshare: 'bike station', aircraft: 'aircraft (transponder)', ais: 'ship (MMSI)', hsl: 'vehicle', 'fin-trains': 'train',
+  wikipedia: 'editor', bluesky: 'author', usgs: 'region', iss: null, coinbase: 'side (buy/sell)', 'bitcoin-mempool': 'sending wallet',
+  'nostr-notes': 'author', 'nostr-zaps': 'zapper', 'nostr-firehose': 'author', webtorrent: 'peer', listeners: 'listener',
+  gifshooter: 'painter', 'custom-mqtt': 'topic', 'random-walk': 'voice',
+};
+
 const PALETTE = ['#FF8018', '#F3256C', '#9900CA', '#3F25FD', '#197FE7', '#3FDA93', '#99FF35', '#F3DA02'];
 
 export const SOURCES = [...denmark, ...streams.slice(0, -2), ...nostr, ...torrent, ...p2p, ...streams.slice(-2)].map((src, i) => {
@@ -33,7 +43,7 @@ export const SOURCES = [...denmark, ...streams.slice(0, -2), ...nostr, ...torren
   const color = PALETTE[i % PALETTE.length];
   // ink: legible text on the swatch; shadow: a different saturated hue for the hard drop shadow
   const ink = ['#9900CA', '#3F25FD', '#197FE7', '#F3256C'].includes(color) ? '#F2F2F2' : '#050505';
-  return { short: SHORT[src.id], ...src, color, ink, shadow: PALETTE[(i + 3) % PALETTE.length], allFields };
+  return { short: SHORT[src.id], identity: IDENTITY[src.id], ...src, color, ink, shadow: PALETTE[(i + 3) % PALETTE.length], allFields };
 });
 
 export const SOURCE_BY_ID = Object.fromEntries(SOURCES.map((s) => [s.id, s]));
