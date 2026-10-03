@@ -1,1 +1,141 @@
-{ "checkedAt": null, "seconds": 0, "sources": {} }
+{
+  "checkedAt": "2026-10-03T11:39:10.039Z",
+  "seconds": 120,
+  "sources": {
+    "energinet-grid": {
+      "status": "error",
+      "message": "network/CORS error — source unreachable from this browser",
+      "eventsPerMin": 0
+    },
+    "energinet-co2": {
+      "status": "error",
+      "message": "network/CORS error — source unreachable from this browser",
+      "eventsPerMin": 0
+    },
+    "elpris": {
+      "status": "ok",
+      "message": "24 price slots",
+      "eventsPerMin": 181
+    },
+    "dmi-weather": {
+      "status": "ok",
+      "message": "3 stations",
+      "eventsPerMin": 359
+    },
+    "dmi-lightning": {
+      "status": "ok",
+      "message": "no strikes right now",
+      "eventsPerMin": 0
+    },
+    "dmi-ocean": {
+      "status": "ok",
+      "message": "1 gauges",
+      "eventsPerMin": 46
+    },
+    "open-meteo": {
+      "status": "ok",
+      "message": "15 towns",
+      "eventsPerMin": 181
+    },
+    "sensor-community": {
+      "status": "ok",
+      "message": "11 sensor sites",
+      "eventsPerMin": 359
+    },
+    "bikeshare": {
+      "status": "error",
+      "message": "network/CORS error — source unreachable from this browser",
+      "eventsPerMin": 0
+    },
+    "aircraft": {
+      "status": "error",
+      "message": "network/CORS error — source unreachable from this browser",
+      "eventsPerMin": 0
+    },
+    "ais": {
+      "status": "ok",
+      "message": "subscribed vessels-v2/+/location",
+      "eventsPerMin": 1309
+    },
+    "hsl": {
+      "status": "ok",
+      "message": "subscribed /hfp/v2/journey/ongoing/vp/tram/#",
+      "eventsPerMin": 24159
+    },
+    "fin-trains": {
+      "status": "ok",
+      "message": "subscribed train-locations/#",
+      "eventsPerMin": 3880
+    },
+    "wikipedia": {
+      "status": "ok",
+      "message": "streaming",
+      "eventsPerMin": 2
+    },
+    "bluesky": {
+      "status": "ok",
+      "message": "connected",
+      "eventsPerMin": 6
+    },
+    "usgs": {
+      "status": "ok",
+      "message": "213 quakes",
+      "eventsPerMin": 359
+    },
+    "iss": {
+      "status": "ok",
+      "message": "16765 km from Copenhagen",
+      "eventsPerMin": 12
+    },
+    "coinbase": {
+      "status": "ok",
+      "message": "connected",
+      "eventsPerMin": 144
+    },
+    "bitcoin-mempool": {
+      "status": "connecting",
+      "message": "closed, retrying in 60s",
+      "eventsPerMin": 0
+    },
+    "nostr-notes": {
+      "status": "ok",
+      "message": "connected",
+      "eventsPerMin": 38
+    },
+    "nostr-zaps": {
+      "status": "ok",
+      "message": "connected",
+      "eventsPerMin": 5
+    },
+    "nostr-firehose": {
+      "status": "ok",
+      "message": "connected",
+      "eventsPerMin": 2587
+    },
+    "webtorrent": {
+      "status": "ok",
+      "message": "0 peers · 21.3 MB · 0 KB/s",
+      "eventsPerMin": 27
+    },
+    "listeners": {
+      "status": "ok",
+      "message": "0 other listeners",
+      "eventsPerMin": 0
+    },
+    "gifshooter": {
+      "status": "ok",
+      "message": "canvas “public” · 0 painters seen",
+      "eventsPerMin": 0
+    },
+    "custom-mqtt": {
+      "status": "ok",
+      "message": "subscribed #",
+      "eventsPerMin": 149357
+    },
+    "random-walk": {
+      "status": "ok",
+      "message": "generating",
+      "eventsPerMin": 359
+    }
+  }
+}
