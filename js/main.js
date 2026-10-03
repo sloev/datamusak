@@ -169,7 +169,7 @@ function sourceCard(src) {
   const cfg = state.sources[src.id];
   const st = statusOf.get(src.id) || { kind: 'idle', msg: '' };
   const body = h('div', { class: 'mapping', hidden: true });
-  const card = h('div', { class: 'source', 'data-id': src.id },
+  const card = h('div', { class: 'source', 'data-id': src.id, style: `--c:${src.color}` },
     h('div', { class: 'source-head' },
       h('input', {
         type: 'checkbox', checked: cfg.enabled, title: 'Listen to this source',
@@ -180,7 +180,7 @@ function sourceCard(src) {
           save();
         },
       }),
-      h('span', { class: 'swatch', style: `background:${src.color}` }),
+      h('span', { class: 'swatch' }),
       h('button', { class: 'name', onclick: () => toggleMapping(card) }, src.name),
       h('span', { class: 'rate', title: 'events per minute' }),
       h('span', { class: 'status ' + st.kind, title: 'idle / connecting / ok / error' }),
@@ -392,6 +392,11 @@ $('#reset').onclick = () => {
 
 renderGlobals();
 renderSources();
+
+// Installable, offline-capable app shell.
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
 
 // Handy for debugging in the console (and used by the end-to-end tests).
 window.datamusak = { state, engine, audio, midi, map: soundMap.map, sources: SOURCES };

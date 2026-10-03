@@ -4,7 +4,7 @@ Live open data from Denmark (and beyond), turned into music right in the browser
 
 datamusak listens to public data streams and turns every data point into a note. Each data field can drive pitch, velocity, note length, stereo pan and brightness. Every note is snapped to a scale of your choice, played on General MIDI instruments, and drawn on a map, a piano roll and a raw data → MIDI log.
 
-It is a static site with no build step and no server. All data is fetched straight from each provider's CORS-enabled API, WebSocket or MQTT-over-WebSocket broker.
+It is a static site with no build step and no server, and an installable PWA. The app shell is precached by a service worker. Heavy libraries (MQTT, WebTorrent, the sound engine) are self-hosted in `vendor/` and only loaded when a source or the audio first needs them. Instrument samples are cached the first time they play. All data is fetched straight from each provider's CORS-enabled API, WebSocket or MQTT-over-WebSocket broker.
 
 *(This project started life as "Radio Nabovarme", which sonified district-heating meters over a private MQTT broker. That server and its UI have been replaced.)*
 
@@ -31,6 +31,10 @@ It is a static site with no build step and no server. All data is fetched straig
 | International Space Station position | REST | world |
 | Crypto trades (Coinbase) | WebSocket | internet |
 | Bitcoin unconfirmed transactions | WebSocket | internet |
+| Nostr notes (geotagged notes land on the map; Danish-looking filter) | WebSocket relays | internet |
+| Nostr zaps (Lightning tips, sats from the BOLT11 invoice) | WebSocket relays | internet |
+| Nostr firehose (every event kind) | WebSocket relays | internet |
+| WebTorrent swarm of a Creative Commons film (every received block is a note) | WebRTC + web seed | internet |
 | Custom MQTT broker + topic (default: public Mosquitto test broker) | **MQTT/WSS** | anywhere |
 | Offline random walk (for testing) | — | — |
 
@@ -76,7 +80,12 @@ npm run test:e2e     # Playwright, fully offline: CDNs, samples and APIs are moc
 ## Code layout
 
 ```
-index.html          page shell (Leaflet, mqtt.js, WebAudioFont from CDNs)
+index.html          page shell
+sw.js               service worker (precached shell, cache-first vendor libs + instrument samples)
+manifest.webmanifest
+assets/             logo + icons (generated: npm run logo)
+vendor/             self-hosted Leaflet, mqtt.js, WebTorrent, WebAudioFont player, Titan One font (npm run vendor)
+js/lazy.js          on-demand loading of the heavy libraries
 css/style.css
 js/main.js          UI wiring
 js/engine.js        data event → normalized fields → notes (rate limit, quantize, routing)
@@ -84,7 +93,7 @@ js/normalize.js     fixed / auto-learned ranges
 js/scales.js        scales and quantization
 js/audio.js         WebAudioFont instruments, slot buses, reverb/delay/tone/master
 js/midi.js          Web MIDI output
-js/map.js           Leaflet map with per-source homes and event pulses
+js/map.js           OpenStreetMap (grayscale under a drifting rainbow), per-source homes, event pulses
 js/viz.js           piano roll and raw log
 js/state.js         defaults and localStorage persistence
 js/sources/         data sources (runtime helpers: poll, sequence, spread, mqtt, ws, sse)

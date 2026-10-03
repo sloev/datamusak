@@ -35,30 +35,50 @@ export class PianoRoll {
     const playX = w * 0.85;
     const x = (t) => playX - ((now - t) / SPAN_MS) * playX;
     const rowH = h / (HIGH - LOW);
-    // octave guides
-    g.fillStyle = 'rgba(255,255,255,0.05)';
-    for (let n = LOW; n <= HIGH; n += 12) g.fillRect(0, h - (n - LOW) * rowH, w, 1);
-    g.fillStyle = 'rgba(255,255,255,0.35)';
-    g.font = '10px ui-monospace, monospace';
-    for (let n = 36; n <= HIGH; n += 12) g.fillText(noteName(n), 4, h - (n - LOW) * rowH - 2);
-    // notes
+    // octave guides: little zigzags, like the logo's stripes
+    g.lineWidth = 1;
+    g.strokeStyle = 'rgba(0,0,0,0.12)';
+    for (let n = LOW; n <= HIGH; n += 12) {
+      const y = h - (n - LOW) * rowH;
+      g.beginPath();
+      for (let xx = 0, up = 0; xx <= w; xx += 6, up ^= 1) g.lineTo(xx, y + (up ? -2 : 2));
+      g.stroke();
+    }
+    g.fillStyle = '#000';
+    g.font = '10px "Titan One", system-ui, sans-serif';
+    for (let n = 36; n <= HIGH; n += 12) g.fillText(noteName(n), 4, h - (n - LOW) * rowH - 3);
+    // notes: bubbly, black-outlined
     this.notes = this.notes.filter((n) => n.end > now - SPAN_MS);
+    g.lineWidth = 1.5;
+    g.strokeStyle = '#000';
     for (const n of this.notes) {
       const x0 = x(n.start);
-      const x1 = Math.max(x0 + 2, x(Math.min(n.end, now + SPAN_MS)));
-      const y = h - (Math.min(HIGH, Math.max(LOW, n.note)) - LOW) * rowH;
+      const x1 = Math.max(x0 + 4, x(Math.min(n.end, now + SPAN_MS)));
+      const hh = Math.max(4, rowH * 1.6);
+      const y = h - (Math.min(HIGH, Math.max(LOW, n.note)) - LOW) * rowH - hh / 2;
       const active = n.start <= now && n.end >= now;
-      g.globalAlpha = 0.25 + (n.vel / 127) * 0.75;
+      g.globalAlpha = 0.35 + (n.vel / 127) * 0.65;
       g.fillStyle = n.color;
-      g.fillRect(x0, y - rowH, x1 - x0, Math.max(2, rowH));
+      g.beginPath();
+      g.roundRect(x0, y, x1 - x0, hh, hh / 2);
+      g.fill();
+      g.stroke();
       if (active) {
         g.globalAlpha = 1;
-        g.fillRect(playX - 3, y - rowH - 1, 6, Math.max(4, rowH + 2));
+        g.beginPath();
+        g.arc(playX, y + hh / 2, hh * 0.9, 0, Math.PI * 2);
+        g.fill();
+        g.stroke();
       }
     }
     g.globalAlpha = 1;
-    g.fillStyle = 'rgba(255,255,255,0.4)';
-    g.fillRect(playX, 0, 1, h);
+    // rainbow playhead
+    const grad = g.createLinearGradient(0, 0, 0, h);
+    ['#ff2e4d', '#ff8a00', '#ffd400', '#2bd94a', '#00c8ff', '#2e5bff', '#a637ff'].forEach((c, i, a) => grad.addColorStop(i / (a.length - 1), c));
+    g.fillStyle = '#000';
+    g.fillRect(playX - 3, 0, 6, h);
+    g.fillStyle = grad;
+    g.fillRect(playX - 1.5, 0, 3, h);
     requestAnimationFrame(this.draw);
   }
 }

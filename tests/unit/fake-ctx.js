@@ -2,13 +2,14 @@
 // so source parsing can be tested against fixture payloads without a network.
 import { defaultMapping } from '../../js/state.js';
 
-export function fakeCtx(src, fixtures = {}) {
-  const rec = { emitted: [], sequences: [], spread: [], polls: [], mqtt: [], ws: [], sse: [], status: [] };
+export function fakeCtx(src, fixtures = {}, libs = {}) {
+  const rec = { emitted: [], sequences: [], spread: [], polls: [], mqtt: [], ws: [], sse: [], status: [], stops: [] };
   const ctx = {
     options: defaultMapping(src).options,
     emit: (ev) => rec.emitted.push(ev),
     status: (kind, msg) => rec.status.push([kind, msg]),
-    onStop() {},
+    onStop: (fn) => rec.stops.push(fn),
+    lib: async (name) => libs[name],
     stopped: false,
     async fetchJSON(url) {
       for (const [frag, body] of Object.entries(fixtures)) {
