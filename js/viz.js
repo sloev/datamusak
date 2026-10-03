@@ -37,20 +37,20 @@ export class PianoRoll {
     const rowH = h / (HIGH - LOW);
     // octave guides: little zigzags, like the logo's stripes
     g.lineWidth = 1;
-    g.strokeStyle = 'rgba(0,0,0,0.12)';
+    g.strokeStyle = 'rgba(26,242,255,0.28)';
     for (let n = LOW; n <= HIGH; n += 12) {
       const y = h - (n - LOW) * rowH;
       g.beginPath();
       for (let xx = 0, up = 0; xx <= w; xx += 6, up ^= 1) g.lineTo(xx, y + (up ? -2 : 2));
       g.stroke();
     }
-    g.fillStyle = '#000';
+    g.fillStyle = '#f2f2f2';
     g.font = '10px "Titan One", system-ui, sans-serif';
     for (let n = 36; n <= HIGH; n += 12) g.fillText(noteName(n), 4, h - (n - LOW) * rowH - 3);
     // notes: bubbly, black-outlined
     this.notes = this.notes.filter((n) => n.end > now - SPAN_MS);
     g.lineWidth = 1.5;
-    g.strokeStyle = '#000';
+    g.strokeStyle = '#050505';
     for (const n of this.notes) {
       const x0 = x(n.start);
       const x1 = Math.max(x0 + 4, x(Math.min(n.end, now + SPAN_MS)));
@@ -72,13 +72,13 @@ export class PianoRoll {
       }
     }
     g.globalAlpha = 1;
-    // rainbow playhead
-    const grad = g.createLinearGradient(0, 0, 0, h);
-    ['#ff2e4d', '#ff8a00', '#ffd400', '#2bd94a', '#00c8ff', '#2e5bff', '#a637ff'].forEach((c, i, a) => grad.addColorStop(i / (a.length - 1), c));
-    g.fillStyle = '#000';
-    g.fillRect(playX - 3, 0, 6, h);
-    g.fillStyle = grad;
-    g.fillRect(playX - 1.5, 0, 3, h);
+    // checkerboard playhead
+    for (let y = 0, k = 0; y < h; y += 4, k++) {
+      g.fillStyle = k % 2 ? '#0f0f0f' : '#f2f2f2';
+      g.fillRect(playX - 2, y, 2, 4);
+      g.fillStyle = k % 2 ? '#f2f2f2' : '#0f0f0f';
+      g.fillRect(playX, y, 2, 4);
+    }
     requestAnimationFrame(this.draw);
   }
 }

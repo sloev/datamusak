@@ -26,5 +26,6 @@ const base = new URL('../vendor/', import.meta.url);
 export const LIBS = {
   mqtt: () => loadScript(new URL('mqtt.min.js', base).href).then(() => window.mqtt),
   webtorrent: () => import(new URL('webtorrent.min.js', base).href).then((m) => m.default),
+  trystero: () => import(new URL('trystero-nostr.js', base).href),
   webaudiofont: () => loadScript(new URL('WebAudioFontPlayer.js', base).href).then(() => window.WebAudioFontPlayer),
 };

@@ -13,9 +13,10 @@
   "devDependencies": {
     "@fontsource/titan-one": "5.3.0",
     "@playwright/test": "1.56.1",
+    "esbuild": "0.28.2",
     "leaflet": "1.9.4",
     "mqtt": "5.16.0",
-    "opentype.js": "2.0.0",
+    "trystero": "0.25.4",
     "webaudiofont": "3.0.4",
     "webtorrent": "3.0.21"
   }

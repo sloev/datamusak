@@ -1,5 +1,5 @@
-// OpenStreetMap, put through the datamusak blender: grayscale tiles under a drifting rainbow
-// (multiply blend), black-outlined source homes, and a pulse wherever a data event happens.
+// OpenStreetMap (free, no key), darkened to stay calm behind the colour: source homes are
+// outlined stickers, and every data event pops a pulse where it happened.
 const VIEWS = {
   dk: { center: [56.1, 10.6], zoom: 7 },
   nordic: { center: [58.5, 16], zoom: 5 },
@@ -14,13 +14,12 @@ export class SoundMap {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom: 19,
     }).addTo(this.map);
-    this.addRainbow();
     this.renderer = L.canvas({ padding: 0.3 });
     this.homes = {};
     this.pulses = [];
     for (const src of sources) {
       const m = L.circleMarker(src.home, {
-        radius: 8, color: '#000', weight: 3, fillColor: src.color, fillOpacity: 1,
+        radius: 8, color: '#050505', weight: 3, fillColor: src.color, fillOpacity: 1,
         dashArray: src.geo === 'virtual' ? '4 3' : null, renderer: this.renderer,
       })
         .bindTooltip(src.name + (src.geo === 'virtual' ? ' (no real place — parked at sea)' : ''))
@@ -30,22 +29,6 @@ export class SoundMap {
     }
     this.animate = this.animate.bind(this);
     requestAnimationFrame(this.animate);
-  }
-
-  // A viewport-sized layer between tiles and markers, kept still while the map pans.
-  addRainbow() {
-    const pane = this.map.createPane('rainbow');
-    pane.style.zIndex = 250;
-    pane.style.pointerEvents = 'none';
-    const div = L.DomUtil.create('div', 'rainbow-wash', pane);
-    const place = () => {
-      const size = this.map.getSize();
-      div.style.width = size.x + 'px';
-      div.style.height = size.y + 'px';
-      L.DomUtil.setPosition(div, this.map.containerPointToLayerPoint([0, 0]));
-    };
-    this.map.on('move zoom viewreset resize zoomend moveend', place);
-    place();
   }
 
   view(name) {
@@ -63,7 +46,7 @@ export class SoundMap {
     const vel = played ? notes[0].velocity / 127 : 0.2;
     const r = 3 + vel * 13;
     const c = L.circleMarker(pos, {
-      radius: r, color: '#000', weight: played ? 2.5 : 1, fillColor: src.color,
+      radius: r, color: '#050505', weight: played ? 2.5 : 1, fillColor: src.color,
       fillOpacity: played ? 0.95 : 0.35, opacity: played ? 1 : 0.35, renderer: this.renderer, interactive: false,
     }).addTo(this.map);
     const delay = played ? notes[0].delayMs : 0;

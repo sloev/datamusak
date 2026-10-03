@@ -1,6 +1,6 @@
 import { SOURCES, SOURCE_BY_ID } from './sources/index.js';
 import { createRuntime } from './sources/runtime.js';
-import { loadState, saveState, clearState, defaultMapping, PARAMS, DEFAULT_SLOTS } from './state.js';
+import { loadState, saveState, saveNow, clearState, defaultMapping, PARAMS, DEFAULT_SLOTS } from './state.js';
 import { SCALES, NOTE_NAMES, noteName } from './scales.js';
 import { AudioEngine, DRUMS } from './audio.js';
 import { MidiOut } from './midi.js';
@@ -8,8 +8,25 @@ import { Normalizer } from './normalize.js';
 import { Engine } from './engine.js';
 import { SoundMap } from './map.js';
 import { PianoRoll, EventLog } from './viz.js';
+import { mountLogo } from './logo.js';
+import { presence } from './presence.js';
+import { BUILTIN, snapshot, applySnapshot, shareUrl, decode, presetFromHash, localPresets, saveLocalPreset, deleteLocalPreset } from './presets.js';
 
 const state = loadState(SOURCES);
+
+// A shared preset link (#p=…) replaces the current setup once, then the hash is cleared.
+const linked = presetFromHash();
+let linkedNotice = '';
+if (linked) {
+  try {
+    applySnapshot(state, SOURCES, await decode(linked));
+    saveNow(state);
+    linkedNotice = 'Loaded the preset from your link.';
+  } catch {
+    linkedNotice = 'That preset link looks broken — kept your own settings.';
+  }
+  history.replaceState(null, '', location.pathname + location.search);
+}
 const save = () => saveState(state);
 const audio = new AudioEngine(state);
 const midi = new MidiOut(state);
@@ -47,7 +64,40 @@ engine.on((out) => {
   log.add(out);
   soundMap.pulse(out.src, out.ev, out.notes);
   for (const n of out.notes) roll.add(out.src, n);
+  // pass our own notes on to other listeners (never echo theirs back)
+  if (out.notes.length && out.src.id !== 'listeners') presence.share({ ...out.notes[0], source: out.src.id });
 });
+
+// ------------------------------------------------------------------ logo
+
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const logo = mountLogo($('#logo'), { still: reduceMotion });
+if (!logo) {
+  $('#logo').hidden = true;
+  $('#logo-fallback').src = 'assets/logo.png';
+  $('#logo-fallback').hidden = false;
+}
+const beatVar = () => document.documentElement.style.setProperty('--beat', `${60 / state.global.bpm}s`);
+beatVar();
+
+// ---------------------------------------------------------------- online
+
+function renderOnline() {
+  const b = $('#online');
+  const on = presence.connected;
+  b.classList.toggle('on', on);
+  b.textContent = on ? `● ${presence.peers + 1} online` : '○ offline';
+}
+presence.on(renderOnline);
+$('#online').onclick = async () => {
+  state.global.online = !presence.connected;
+  save();
+  if (state.global.online) await presence.join();
+  else presence.leave();
+  renderOnline();
+};
+// join after the page has settled, so presence never slows the first paint
+if (state.global.online) setTimeout(() => presence.join().then(renderOnline).catch(renderOnline), 1500);
 $('#log-pause').onchange = (e) => (log.paused = e.target.checked);
 $('#log-played').onchange = (e) => (log.onlyPlayed = e.target.checked);
 document.querySelectorAll('.map-views button').forEach((b) => (b.onclick = () => soundMap.view(b.dataset.view)));
@@ -97,6 +147,7 @@ $('#power').onclick = async () => {
   powered = !powered;
   $('#power').textContent = powered ? '■ Stop' : '▶ Start';
   $('#power').classList.toggle('on', powered);
+  logo?.glitch();
   if (powered) {
     await audio.start();
     midi.sendAllPrograms();
@@ -128,22 +179,30 @@ function renderGlobals() {
         })
       : h('button', { onclick: () => midi.enable().catch((e) => alert('MIDI unavailable: ' + e.message)) }, 'Enable')
     : h('span', { class: 'muted' }, 'not supported');
+  // The essentials stay in view; everything else folds away under "Advanced".
+  const advanced = h('details', { class: 'advanced', open: advancedOpen, ontoggle: (e) => (advancedOpen = e.target.open) },
+    h('summary', {}, 'Advanced'),
+    h('div', { class: 'globals' },
+      field('Grid', select(['off', '1/4', '1/8', '1/16', '1/32'].map((q) => [q, q]), g.quantize, set('quantize'))),
+      field('Tone', slider(0, 1, 0.01, g.tone, set('tone'))),
+      field('Reverb', slider(0, 1.5, 0.01, g.reverb, set('reverb'))),
+      field('Delay', slider(0, 0.8, 0.01, g.delayMix, set('delayMix'))),
+      field('Feedback', slider(0, 0.85, 0.01, g.delayFeedback, set('delayFeedback'))),
+      field('Delay time', select([[0.25, '1/16'], [0.5, '1/8'], [0.75, '3/16'], [1, '1/4'], [1.5, '3/8'], [2, '1/2']], g.delayBeats, (v) => set('delayBeats')(parseFloat(v)))),
+      field('Polyphony', numberInput(4, 128, 1, g.maxPolyphony, set('maxPolyphony'), { class: 'n3' })),
+      field('Built-in synth', h('input', { type: 'checkbox', checked: g.internal, onchange: (e) => set('internal')(e.target.checked) })),
+      field('MIDI out', midiControl),
+    ),
+  );
   $('#globals').replaceChildren(
-    field('BPM', numberInput(30, 240, 1, g.bpm, set('bpm'), { class: 'n3' })),
-    field('Grid', select(['off', '1/4', '1/8', '1/16', '1/32'].map((q) => [q, q]), g.quantize, set('quantize'))),
+    field('BPM', numberInput(30, 240, 1, g.bpm, set('bpm', beatVar), { class: 'n3' })),
     field('Key', select(NOTE_NAMES.map((n, i) => [i, n]), g.root, (v) => set('root')(parseInt(v)))),
     field('Scale', select(Object.entries(SCALES).map(([id, s]) => [id, s.name]), g.scale, set('scale'))),
     field('Master', slider(0, 1.2, 0.01, g.master, set('master'))),
-    field('Tone', slider(0, 1, 0.01, g.tone, set('tone'))),
-    field('Reverb', slider(0, 1.5, 0.01, g.reverb, set('reverb'))),
-    field('Delay', slider(0, 0.8, 0.01, g.delayMix, set('delayMix'))),
-    field('Feedback', slider(0, 0.85, 0.01, g.delayFeedback, set('delayFeedback'))),
-    field('Delay time', select([[0.25, '1/16'], [0.5, '1/8'], [0.75, '3/16'], [1, '1/4'], [1.5, '3/8'], [2, '1/2']], g.delayBeats, (v) => set('delayBeats')(parseFloat(v)))),
-    field('Polyphony', numberInput(4, 128, 1, g.maxPolyphony, set('maxPolyphony'), { class: 'n3' })),
-    field('Built-in synth', h('input', { type: 'checkbox', checked: g.internal, onchange: (e) => set('internal')(e.target.checked) })),
-    field('MIDI out', midiControl),
+    advanced,
   );
 }
+let advancedOpen = false;
 midi.onChange = renderGlobals;
 
 // ---------------------------------------------------------------- sources
@@ -156,13 +215,15 @@ function renderSources() {
     h('p', { class: 'hint' }, 'Tick a source to listen. Click a name (or its circle on the map) to edit how its data becomes music.'),
   );
   let group;
-  for (const src of SOURCES) {
+  SOURCES.forEach((src, i) => {
     if (src.group !== group) {
       group = src.group;
       root.append(h('h3', {}, group));
     }
-    root.append(sourceCard(src));
-  }
+    const card = sourceCard(src);
+    card.style.setProperty('--i', i);
+    root.append(card);
+  });
 }
 
 function sourceCard(src) {
@@ -382,6 +443,61 @@ function showTab(name) {
   document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
   document.querySelectorAll('.tab').forEach((t) => (t.hidden = t.id !== 'tab-' + name));
   if (name === 'instruments') renderInstruments();
+  if (name === 'presets') renderPresets();
+}
+
+// --------------------------------------------------------------- presets
+
+function renderPresets(message = linkedNotice) {
+  linkedNotice = '';
+  const root = $('#tab-presets');
+  const load = (snap) => {
+    applySnapshot(state, SOURCES, snap);
+    saveNow(state);
+    location.reload();
+  };
+  const nameInput = h('input', { type: 'text', placeholder: 'name this setup', class: 'preset-name', maxlength: 40 });
+  const status = h('p', { class: 'preset-msg', role: 'status' }, message || '');
+  const mine = Object.entries(localPresets()).sort((a, b) => b[1].saved - a[1].saved);
+  root.replaceChildren(
+    h('p', { class: 'hint' }, 'A preset is the whole setup: sources, mappings, instruments and global settings. Loading one reloads the page.'),
+    status,
+    h('h3', {}, 'Share'),
+    h('div', { class: 'row' },
+      h('button', {
+        class: 'pop',
+        onclick: async () => {
+          const url = await shareUrl(snapshot(state, SOURCES));
+          try {
+            if (navigator.share && matchMedia('(pointer: coarse)').matches) await navigator.share({ title: 'datamusak preset', url });
+            else await navigator.clipboard.writeText(url);
+            status.textContent = 'Link copied — anyone opening it gets this exact setup.';
+          } catch {
+            status.textContent = url;
+          }
+        },
+      }, 'Copy share link'),
+    ),
+    h('h3', {}, 'Save'),
+    h('div', { class: 'row' }, nameInput,
+      h('button', {
+        onclick: () => {
+          const name = nameInput.value.trim() || `Setup ${new Date().toLocaleString('en-GB')}`;
+          saveLocalPreset(name, snapshot(state, SOURCES));
+          renderPresets(`Saved “${name}” in this browser.`);
+        },
+      }, 'Save')),
+    mine.length ? h('div', { class: 'presets' }, mine.map(([name, p]) =>
+      h('div', { class: 'preset' },
+        h('button', { class: 'preset-load', onclick: () => load(p.snap) }, name),
+        h('small', {}, new Date(p.saved).toLocaleString('en-GB')),
+        h('button', { class: 'x', title: 'delete', onclick: () => { deleteLocalPreset(name); renderPresets(); } }, '✕')))) : h('p', { class: 'hint' }, 'Nothing saved yet.'),
+    h('h3', {}, 'Built in'),
+    h('div', { class: 'presets' }, BUILTIN.map((p) =>
+      h('div', { class: 'preset' },
+        h('button', { class: 'preset-load', onclick: () => load(p.snap) }, p.name),
+        h('small', {}, p.desc)))),
+  );
 }
 document.querySelectorAll('.tabs button').forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 $('#reset').onclick = () => {
@@ -392,6 +508,7 @@ $('#reset').onclick = () => {
 
 renderGlobals();
 renderSources();
+if (linkedNotice) showTab('presets');
 
 // Installable, offline-capable app shell.
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {

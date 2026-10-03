@@ -34,6 +34,7 @@ export const DEFAULT_GLOBAL = {
   delayFeedback: 0.35,
   delayBeats: 0.75,
   maxPolyphony: 32,
+  online: true,
   midiOut: '',
   internal: true,
 };
@@ -101,6 +102,12 @@ export function saveState(state) {
   saveTimer = setTimeout(flush, 300);
 }
 if (typeof window !== 'undefined') window.addEventListener('pagehide', flush);
+
+// Write immediately (before a reload).
+export function saveNow(state) {
+  pending = state;
+  flush();
+}
 
 export function clearState() {
   pending = null;
