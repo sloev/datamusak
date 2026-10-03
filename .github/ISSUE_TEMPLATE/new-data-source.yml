@@ -1,0 +1,92 @@
+name: New data source
+description: Suggest (or offer to build) a live data source for datamusak
+title: "Data source: "
+labels: ["data source"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! datamusak only uses data a **browser can fetch directly** — no server of our own.
+        That means a CORS-enabled HTTP API, a WebSocket, MQTT over WebSockets, server-sent events,
+        Nostr, WebRTC/Trystero or WebTorrent. Free and keyless is strongly preferred.
+        See [Adding a data source](https://github.com/sloev/datamusak#adding-a-data-source) in the README.
+  - type: input
+    id: name
+    attributes:
+      label: Name
+      placeholder: e.g. Copenhagen harbour water temperature
+    validations:
+      required: true
+  - type: input
+    id: url
+    attributes:
+      label: Endpoint or docs URL
+      placeholder: https://… or wss://…
+    validations:
+      required: true
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Transport
+      options:
+        - REST / JSON (polled)
+        - WebSocket
+        - MQTT over WebSocket (wss://)
+        - Server-sent events
+        - Nostr relays
+        - WebRTC / Trystero
+        - WebTorrent
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: cors
+    attributes:
+      label: Does it work from a browser?
+      description: For HTTP APIs, check for an `Access-Control-Allow-Origin` header (WebSockets/MQTT don't need CORS).
+      options:
+        - "Yes — I tried it from a web page / the response has Access-Control-Allow-Origin"
+        - Not sure
+        - "No (it would need a proxy)"
+    validations:
+      required: true
+  - type: dropdown
+    id: auth
+    attributes:
+      label: API key or login needed?
+      options:
+        - No, open and keyless
+        - Free key
+        - Paid
+    validations:
+      required: true
+  - type: input
+    id: rate
+    attributes:
+      label: How often does it update?
+      placeholder: e.g. every minute, ~50 messages/s, on events
+  - type: textarea
+    id: location
+    attributes:
+      label: Where is it on the map?
+      description: A fixed place, coordinates per data point, or "not a place" (it gets parked at sea).
+  - type: textarea
+    id: fields
+    attributes:
+      label: Interesting numeric fields
+      description: Which numbers should make music, with units and typical ranges if you know them.
+      placeholder: |
+        temperature °C (−10…30)
+        wind m/s (0…25)
+  - type: textarea
+    id: sample
+    attributes:
+      label: Sample payload
+      description: One real response or message.
+      render: json
+  - type: checkboxes
+    id: pr
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd like to open a pull request for this myself

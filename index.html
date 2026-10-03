@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>datamusak</title>
   <meta name="description" content="Live open data from Denmark and beyond, turned into music in your browser." />
-  <meta name="theme-color" content="#ffffff" />
+  <meta name="theme-color" content="#000000" />
+  <meta property="og:image" content="assets/logo.png" />
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+  <link rel="icon" href="assets/icon-192.png" type="image/png" />
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
   <link rel="preload" href="vendor/titan-one.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="preload" href="assets/logo.svg" as="image" />
   <link rel="stylesheet" href="vendor/leaflet.css" />
   <link rel="stylesheet" href="css/style.css" />
   <script src="vendor/leaflet.js" defer></script>
@@ -18,9 +18,17 @@
 </head>
 <body>
   <header>
-    <h1><img class="logo" src="assets/logo.svg" alt="datamusak" width="351" height="78" /></h1>
-    <button id="power" class="power">▶ Start</button>
-    <div id="globals" class="globals"></div>
+    <h1 class="hero">
+      <canvas id="logo" width="800" height="220" role="img" aria-label="datamusak"></canvas>
+      <img id="logo-fallback" alt="datamusak" width="800" height="220" hidden />
+    </h1>
+    <div class="deck">
+      <div class="deck-top">
+        <button id="power" class="power">▶ Start</button>
+        <button id="online" class="online" title="Peer-to-peer presence: see and hear other listeners (Trystero over Nostr relays)">● offline</button>
+      </div>
+      <div id="globals" class="globals"></div>
+    </div>
   </header>
   <main>
     <section class="stage">
@@ -44,13 +52,17 @@
       <nav class="tabs">
         <button data-tab="sources" class="active">Sources</button>
         <button data-tab="instruments">Instruments</button>
+        <button data-tab="presets">Presets</button>
         <button data-tab="about">About</button>
       </nav>
       <div id="tab-sources" class="tab"></div>
       <div id="tab-instruments" class="tab" hidden></div>
+      <div id="tab-presets" class="tab" hidden></div>
       <div id="tab-about" class="tab about" hidden>
         <p><strong>datamusak</strong> listens to live open data — the Danish power grid, DMI weather stations, lightning, tide gauges, air-quality sensors, bike share, aircraft, ships on open MQTT brokers, Nostr relays, a WebTorrent swarm, Wikipedia edits, Bluesky posts and more — and turns every data point into a note.</p>
-        <p>Install it as an app from your browser menu: it works offline for the shell, and caches instruments once they have been played.</p>
+        <p>Install it as an app from your browser menu: the shell works offline, and instruments are cached once they have been played. Your settings and presets are saved in this browser.</p>
+        <p><em>Online</em> joins a peer-to-peer room (Trystero over public Nostr relays) to count other listeners and pass played notes between you — like any WebRTC app, peers can see each other's IP address. Switch it off any time with the button in the header.</p>
+        <p>Want another data source? <a href="https://github.com/sloev/datamusak/issues/new?template=new-data-source.yml" target="_blank" rel="noopener">Suggest one</a> or read <a href="https://github.com/sloev/datamusak#adding-a-data-source" target="_blank" rel="noopener">how to add one</a>.</p>
         <p>Each source has a <em>mapping</em>: choose which data field drives pitch, velocity, note length, stereo pan and brightness (sent as MIDI CC74), the value range for each, and which instruments it plays. Pitch is always snapped to the chosen scale. Fields without a fixed physical range learn their range automatically from recent data.</p>
         <p>Slow data (prices, weather, grid) is played as a looping step sequence over the latest values, so it changes gradually as new data arrives. Fast streams (ships, edits, posts, trades) trigger notes directly and are limited by <em>max notes/s</em>.</p>
         <p>Everything runs in your browser: data is fetched directly from each provider's public, CORS-enabled API or WebSocket. If a provider is down or blocks browsers, its status dot turns red — the rest keep playing.</p>

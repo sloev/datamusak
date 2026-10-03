@@ -10,6 +10,8 @@ export default defineConfig({
     viewport: { width: 1400, height: 900 },
     // page.route() can't see requests a service worker handles; the PWA test opts back in.
     serviceWorkers: 'block',
+    // the animated WebGL logo is heavy on a software GPU; one still frame is enough for tests
+    reducedMotion: 'reduce',
     launchOptions: { args: ['--autoplay-policy=no-user-gesture-required'] },
   },
   webServer: {

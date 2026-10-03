@@ -2,6 +2,7 @@ import denmark from './denmark.js';
 import streams from './streams.js';
 import nostr from './nostr.js';
 import torrent from './torrent.js';
+import p2p from './p2p.js';
 
 const GEO_RANGES = {
   dk: { lat: [54.5, 57.8], lon: [8, 15.2] },
@@ -9,10 +10,10 @@ const GEO_RANGES = {
   world: { lat: [-60, 75], lon: [-180, 180] },
 };
 
-// Loud, saturated, rainbow-ordered: everything is drawn with black outlines on white.
-const PALETTE = ['#ff2e4d', '#ff8a00', '#ffd400', '#2bd94a', '#00c8ff', '#2e5bff', '#a637ff', '#ff2ed1', '#ff5e00', '#00d6a4', '#7a5cff', '#ff3b8d', '#b5e300', '#00a2ff', '#e62ef0', '#ffb000', '#14e0d0', '#ff4fa0', '#5b8cff', '#c8f000', '#ff6f3c', '#3bd1ff', '#d04bff', '#ff2e4d', '#ffd400'];
+// The 8 face swatches of the logo's acid palette (static UI accents).
+const PALETTE = ['#FF8018', '#F3256C', '#9900CA', '#3F25FD', '#197FE7', '#3FDA93', '#99FF35', '#F3DA02'];
 
-export const SOURCES = [...denmark, ...streams.slice(0, -2), ...nostr, ...torrent, ...streams.slice(-2)].map((src, i) => {
+export const SOURCES = [...denmark, ...streams.slice(0, -2), ...nostr, ...torrent, ...p2p, ...streams.slice(-2)].map((src, i) => {
   const geo = GEO_RANGES[src.geo];
   const allFields = { ...src.fields };
   if (geo) {

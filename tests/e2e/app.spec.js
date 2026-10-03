@@ -12,9 +12,11 @@ test.afterEach(() => expect(errors, 'uncaught page errors').toEqual([]));
 test('loads with every source listed and a map', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveTitle('datamusak');
-  await expect(page.locator('.source')).toHaveCount(25);
+  await expect(page.locator('.source')).toHaveCount(27);
   await expect(page.locator('#map.leaflet-container')).toBeVisible();
   await expect(page.locator('#power')).toHaveText('▶ Start');
+  // the hero logo renders (WebGL) or falls back to the static image
+  await expect(page.locator('#logo:visible, #logo-fallback:visible')).toHaveCount(1);
 });
 
 test('start plays notes from REST sources and shows them everywhere', async ({ page }) => {
@@ -194,4 +196,60 @@ test('heavy libraries are not loaded until needed', async ({ page }) => {
   }
   await page.click('#power');
   await expect.poll(() => requested.some((p) => p.endsWith('WebAudioFontPlayer.js'))).toBe(true);
+});
+
+test('advanced settings are folded away until asked for', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#globals label:has-text("Scale") select')).toBeVisible();
+  await expect(page.locator('#globals label:has-text("Reverb")')).toBeHidden();
+  await page.click('.advanced > summary');
+  await expect(page.locator('#globals label:has-text("Reverb")')).toBeVisible();
+});
+
+test('presets: save, reload from a built-in, and share as a link', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/');
+  await page.selectOption('#globals label:has-text("Scale") select', 'blues');
+  await page.click('.tabs button[data-tab="presets"]');
+  await page.fill('.preset-name', 'my blues');
+  await page.click('#tab-presets button:text-is("Save")');
+  await expect(page.locator('.preset-msg')).toContainText('my blues');
+
+  // share link → open in a fresh page → same setup
+  await page.click('#tab-presets button:has-text("Copy share link")');
+  await expect(page.locator('.preset-msg')).toContainText('copied');
+  const link = await page.evaluate(() => navigator.clipboard.readText());
+  expect(link).toMatch(/#p=[\w-]+$/);
+
+  // load a built-in (reloads)
+  await page.click('.preset-load:has-text("Power grid")');
+  await page.waitForLoadState('load');
+  await expect(page.locator('#globals label:has-text("Scale") select')).toHaveValue('dorian');
+  await expect(page.locator('.source[data-id="elpris"] .source-head input[type=checkbox]')).toBeChecked();
+
+  // the saved local preset brings blues back
+  await page.click('.tabs button[data-tab="presets"]');
+  await page.click('.preset-load:has-text("my blues")');
+  await page.waitForLoadState('load');
+  await expect(page.locator('#globals label:has-text("Scale") select')).toHaveValue('blues');
+
+  // a fresh browser opening the link gets the setup and a notice; the hash is cleared
+  const fresh = await context.browser().newContext({ reducedMotion: 'reduce', serviceWorkers: 'block' });
+  const p2 = await fresh.newPage();
+  await mockNetwork(p2);
+  await p2.goto(link.replace(/^https?:\/\/[^/]+/, 'http://localhost:8123'));
+  await expect(p2.locator('#globals label:has-text("Scale") select')).toHaveValue('blues');
+  await expect(p2.locator('.preset-msg')).toContainText('Loaded the preset');
+  expect(new URL(p2.url()).hash).toBe('');
+  await fresh.close();
+});
+
+test('online button joins and leaves the listener room', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#online')).toHaveText(/online/, { timeout: 8000 }); // auto-joins after load
+  await page.click('#online');
+  await expect(page.locator('#online')).toHaveText(/offline/);
+  await page.reload();
+  await page.waitForTimeout(2500);
+  await expect(page.locator('#online')).toHaveText(/offline/, { timeout: 1000 }); // remembered
 });
