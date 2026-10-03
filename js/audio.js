@@ -1,6 +1,8 @@
 // Sound engine: General MIDI instruments via WebAudioFont (loaded on demand),
 // one bus per instrument slot, plus global tone / delay / reverb / master.
 import { DRUM_NOTES } from './scales.js';
+import { GM } from './gm.js';
+import { LIBS } from './lazy.js';
 
 export const DRUMS = 'drums';
 
@@ -8,7 +10,7 @@ export class AudioEngine {
   constructor(state) {
     this.state = state;
     this.ctx = null;
-    this.player = new WebAudioFontPlayer();
+    this.player = null; // WebAudioFont is loaded on first start
     this.slotBus = [];
     this.presets = []; // per slot: preset object, or {drums: {note: preset}}
     this.loading = [];
@@ -20,7 +22,13 @@ export class AudioEngine {
   }
 
   async start() {
-    if (!this.ctx) this.build();
+    if (!this.ctx) {
+      // Create the context synchronously inside the user gesture, then fetch the engine.
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const Player = await LIBS.webaudiofont();
+      this.player = new Player();
+      this.build();
+    }
     await this.ctx.resume();
   }
 
@@ -29,7 +37,7 @@ export class AudioEngine {
   }
 
   build() {
-    const ctx = (this.ctx = new (window.AudioContext || window.webkitAudioContext)());
+    const ctx = this.ctx;
     this.bus = ctx.createGain();
     this.tone = ctx.createBiquadFilter();
     this.tone.type = 'lowpass';
@@ -65,7 +73,7 @@ export class AudioEngine {
   }
 
   ensureSlot(i) {
-    if (!this.ctx || this.slotBus[i]) return;
+    if (!this.player || this.slotBus[i]) return;
     const g = this.ctx.createGain();
     const p = this.ctx.createStereoPanner();
     g.connect(p);
@@ -76,7 +84,7 @@ export class AudioEngine {
   }
 
   applyGlobals() {
-    if (!this.ctx) return;
+    if (!this.player) return;
     const g = this.state.global;
     const t = this.ctx.currentTime;
     this.master.gain.setTargetAtTime(g.master, t, 0.05);
@@ -98,7 +106,7 @@ export class AudioEngine {
 
   // Resolve and lazily load the WebAudioFont preset(s) for a slot's program.
   loadSlot(i) {
-    if (!this.ctx) return;
+    if (!this.player) return;
     const program = this.state.slots[i].program;
     const loader = this.player.loader;
     const token = (this.loading[i] = {});
@@ -149,6 +157,6 @@ export class AudioEngine {
   }
 
   instrumentNames() {
-    return this.player.loader.instrumentTitles();
+    return GM;
   }
 }

@@ -12,7 +12,7 @@ test.afterEach(() => expect(errors, 'uncaught page errors').toEqual([]));
 test('loads with every source listed and a map', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveTitle('datamusak');
-  await expect(page.locator('.source')).toHaveCount(21);
+  await expect(page.locator('.source')).toHaveCount(25);
   await expect(page.locator('#map.leaflet-container')).toBeVisible();
   await expect(page.locator('#power')).toHaveText('▶ Start');
 });
@@ -128,4 +128,57 @@ test('phone layout has no horizontal scroll', async ({ page }) => {
   await page.click('.source[data-id="energinet-grid"] .name');
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test('nostr relays: events from several relays are de-duplicated and geotags land on the map', async ({ page }) => {
+  const sent = [];
+  await page.routeWebSocket(/relay\.damus\.io|nos\.lol|relay\.primal\.net/, (ws) => {
+    ws.onMessage((m) => {
+      const [type, sub] = JSON.parse(m);
+      sent.push(type);
+      if (type !== 'REQ') return;
+      for (let i = 0; i < 5; i++) {
+        const ev = { id: 'ev' + i, pubkey: 'pk' + i, kind: 1, content: 'hello nostr ' + i, tags: i === 0 ? [['g', 'u3buz']] : [], created_at: 0, sig: '' };
+        ws.send(JSON.stringify(['EVENT', sub, ev]));
+      }
+    });
+  });
+  await page.goto('/');
+  await onlySources(page, ['nostr-notes']);
+  await page.click('#power');
+  await expect(page.locator('.source[data-id="nostr-notes"] .status')).toHaveClass(/ok/);
+  await expect.poll(() => page.locator('.log-row', { hasText: 'note' }).count()).toBe(5);
+  expect(sent.filter((t) => t === 'REQ').length).toBe(3);
+  await expect(page.locator('.log-row', { hasText: '📍' })).toHaveCount(1);
+});
+
+test.describe('PWA', () => {
+  test.use({ serviceWorkers: 'allow' });
+  test('has a valid manifest, icons, and a service worker that precaches the shell', async ({ page, request }) => {
+    const manifest = await (await request.get('/manifest.webmanifest')).json();
+    expect(manifest.name).toBe('datamusak');
+    expect(manifest.display).toBe('standalone');
+    for (const icon of manifest.icons) expect((await request.get('/' + icon.src)).ok(), icon.src).toBeTruthy();
+    await page.goto('/');
+    const cached = await page.evaluate(async () => {
+      await navigator.serviceWorker.ready;
+      const keys = await caches.keys();
+      const shell = await caches.open(keys.find((k) => k.startsWith('shell-')));
+      return (await shell.keys()).map((r) => new URL(r.url).pathname);
+    });
+    expect(cached).toContain('/js/main.js');
+    expect(cached).toContain('/vendor/titan-one.woff2');
+  });
+});
+
+test('heavy libraries are not loaded until needed', async ({ page }) => {
+  const requested = [];
+  page.on('request', (r) => requested.push(new URL(r.url()).pathname));
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  for (const lib of ['mqtt.min.js', 'webtorrent.min.js', 'WebAudioFontPlayer.js']) {
+    expect(requested.some((p) => p.endsWith(lib)), lib).toBe(false);
+  }
+  await page.click('#power');
+  await expect.poll(() => requested.some((p) => p.endsWith('WebAudioFontPlayer.js'))).toBe(true);
 });

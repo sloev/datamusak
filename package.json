@@ -6,12 +6,17 @@
     "serve": "node tests/serve.mjs",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "node --test \"tests/unit/*.test.js\"",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "vendor": "node scripts/vendor.mjs",
+    "logo": "node scripts/make-logo.mjs"
   },
   "devDependencies": {
+    "@fontsource/titan-one": "5.3.0",
     "@playwright/test": "1.56.1",
     "leaflet": "1.9.4",
     "mqtt": "5.16.0",
-    "webaudiofont": "3.0.4"
+    "opentype.js": "2.0.0",
+    "webaudiofont": "3.0.4",
+    "webtorrent": "3.0.21"
   }
 }

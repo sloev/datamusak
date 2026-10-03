@@ -1,8 +1,5 @@
-// Offline mocks: CDN libraries come from node_modules, instrument samples are a
+// Offline mocks: libraries are vendored (same origin); instrument samples are a
 // generated sine wave, and data APIs return small fixtures. Anything else is blocked.
-import path from 'node:path';
-
-const NM = path.resolve('node_modules');
 const sine = (() => {
   const n = 4000;
   const b = Buffer.alloc(n * 2);
@@ -29,10 +26,6 @@ export const API = {
 export async function mockNetwork(page, { api = API, fail = [] } = {}) {
   await page.route(/^https?:\/\/(?!localhost)/, async (route) => {
     const u = route.request().url();
-    if (u.includes('leaflet.js')) return route.fulfill({ path: `${NM}/leaflet/dist/leaflet.js` });
-    if (u.includes('leaflet.css')) return route.fulfill({ path: `${NM}/leaflet/dist/leaflet.css` });
-    if (u.includes('mqtt.min.js')) return route.fulfill({ path: `${NM}/mqtt/dist/mqtt.min.js` });
-    if (u.includes('WebAudioFontPlayer.js')) return route.fulfill({ path: `${NM}/webaudiofont/npm/dist/WebAudioFontPlayer.js` });
     if (u.includes('webaudiofontdata/sound/')) {
       const key = u.split('/').pop().replace('.js', '');
       return route.fulfill({ contentType: 'text/javascript', body: preset(key.startsWith('128') ? '_drum_' + key.slice(3) : '_tone_' + key) });

@@ -1,3 +1,5 @@
+import { LIBS } from '../lazy.js';
+
 // Helpers handed to every source's start(ctx). Everything registered through
 // ctx is torn down automatically when the source is stopped.
 
@@ -92,31 +94,39 @@ export function createRuntime(src, cfg, { emit, setStatus, getBpm }) {
       });
     },
 
-    // MQTT over WebSockets (mqtt.js). onMessage(topic, payloadString).
+    // Lazily loaded third-party libraries: 'mqtt' | 'webtorrent'.
+    lib: (name) => LIBS[name](),
+
+    // MQTT over WebSockets (mqtt.js, loaded on first use). onMessage(topic, payloadString).
     mqtt(url, topics, onMessage, opts = {}) {
       ctx.status('connecting', url);
-      const client = window.mqtt.connect(url, {
-        clientId: 'datamusak_' + Math.random().toString(16).slice(2, 10),
-        reconnectPeriod: 5000,
-        connectTimeout: 15000,
-        clean: true,
-        ...opts,
-      });
-      client.on('connect', () => {
-        client.subscribe(topics, { qos: 0 }, (err) => {
-          if (err) ctx.status('error', 'subscribe failed: ' + err.message);
-          else ctx.status('ok', 'subscribed ' + [].concat(topics).join(', '));
-        });
-      });
-      client.on('message', (topic, payload) => {
-        try {
-          onMessage(topic, payload.toString());
-        } catch {}
-      });
-      client.on('error', (e) => ctx.status('error', explain(e)));
-      client.on('offline', () => ctx.status('connecting', 'reconnecting…'));
-      disposers.push(() => client.end(true));
-      return client;
+      ctx
+        .lib('mqtt')
+        .then((mqtt) => {
+          if (stopped) return;
+          const client = mqtt.connect(url, {
+            clientId: 'datamusak_' + Math.random().toString(16).slice(2, 10),
+            reconnectPeriod: 5000,
+            connectTimeout: 15000,
+            clean: true,
+            ...opts,
+          });
+          client.on('connect', () => {
+            client.subscribe(topics, { qos: 0 }, (err) => {
+              if (err) ctx.status('error', 'subscribe failed: ' + err.message);
+              else ctx.status('ok', 'subscribed ' + [].concat(topics).join(', '));
+            });
+          });
+          client.on('message', (topic, payload) => {
+            try {
+              onMessage(topic, payload.toString());
+            } catch {}
+          });
+          client.on('error', (e) => ctx.status('error', explain(e)));
+          client.on('offline', () => ctx.status('connecting', 'reconnecting…'));
+          disposers.push(() => client.end(true));
+        })
+        .catch((e) => ctx.status('error', explain(e)));
     },
 
     // WebSocket with reconnect + backoff.

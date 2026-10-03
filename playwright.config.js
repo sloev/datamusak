@@ -8,6 +8,8 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:8123',
     viewport: { width: 1400, height: 900 },
+    // page.route() can't see requests a service worker handles; the PWA test opts back in.
+    serviceWorkers: 'block',
     launchOptions: { args: ['--autoplay-policy=no-user-gesture-required'] },
   },
   webServer: {
