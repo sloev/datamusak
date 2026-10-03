@@ -1,4 +1,0 @@
-aiohttp-sse
-paho-mqtt==1.4.0
-psutil
-aiohttp-jinja2
