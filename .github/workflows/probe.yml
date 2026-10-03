@@ -25,18 +25,18 @@ jobs:
           probe "https://sloev.github.io" "https://gbfs.api.ridedott.com/public/v2/odense/gbfs.json"
           curl -s https://raw.githubusercontent.com/MobilityData/gbfs/master/systems.csv | grep -E '^(DK|SE|NO),' | head -40
           cat > ws.mjs <<'JS'
-          const urls = ['wss://nos.lol','wss://relay.damus.io','wss://relay.primal.net','wss://nostr.mom','wss://relay.snort.social','wss://offchain.pub','wss://nostr.wine','wss://relay.nostr.band','wss://nostr-01.yakihonne.com','wss://nostr.data.haus','wss://relay.artio.inf.unibe.ch','wss://yabu.me','wss://ws.blockchain.info/inv','wss://mempool.space/api/v1/ws'];
+          const urls = ['wss://nos.lol','wss://relay.damus.io','wss://relay.primal.net','wss://nostr.mom','wss://relay.snort.social','wss://offchain.pub','wss://nostr.wine','wss://nostr-01.yakihonne.com','wss://nostr.data.haus','wss://relay.artio.inf.unibe.ch','wss://yabu.me','wss://ws.blockchain.info/inv','wss://mempool.space/api/v1/ws'];
           await Promise.all(urls.map((u) => new Promise((res) => {
             let n = 0; const t0 = Date.now();
             const s = new WebSocket(u);
-            const done = (why) => { console.log(u.padEnd(40), why, 'msgs', n, Date.now() - t0 + 'ms'); try { s.close(); } catch {} res(); };
+            let fin = false; const done = (why) => { if (fin) return; fin = true; console.log(u.padEnd(40), why, 'msgs', n, Date.now() - t0 + 'ms'); try { s.close(); } catch {} res(); };
             const to = setTimeout(() => done('timeout-ok'), 10000);
             s.onopen = () => {
               if (u.includes('blockchain')) s.send(JSON.stringify({ op: 'unconfirmed_sub' }));
               else if (u.includes('mempool')) s.send(JSON.stringify({ 'track-mempool': true }));
               else s.send(JSON.stringify(['REQ', 'x', { kinds: [1], since: Math.floor(Date.now() / 1000), limit: 0 }]));
             };
-            s.onmessage = (m) => { n++; if (n === 1 && u.includes('mempool')) console.log('mempool first:', String(m.data).slice(0, 600)); };
+            s.onmessage = (m) => { n++; if (n <= 3 && u.includes('mempool')) console.log('mempool msg:', String(m.data).slice(0, 700)); };
             s.onerror = (e) => { clearTimeout(to); done('error ' + (e.message || '')); };
             s.onclose = (e) => { clearTimeout(to); done('closed ' + e.code); };
           })));
