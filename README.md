@@ -56,13 +56,22 @@ Instrument slots are General MIDI programs or a drum kit, each with its own leve
 ES modules need a web server (not `file://`):
 
 ```sh
-python3 -m http.server 8000
+npm run serve        # or: python3 -m http.server 8000
 # open http://localhost:8000
 ```
 
-## Deploying to GitHub Pages
+## Tests
 
-`.github/workflows/pages.yml` publishes the site on every push to `master`. Turn it on once in **Settings → Pages → Build and deployment → Source: GitHub Actions**. To get the URL `https://<user>.github.io/datamusak/`, rename the repository to `datamusak` under **Settings → General**.
+```sh
+npm install
+npm run test:unit    # node:test, scales/normalizer/engine + every source parser against fixture payloads
+npx playwright install chromium
+npm run test:e2e     # Playwright, fully offline: CDNs, samples and APIs are mocked
+```
+
+## Deploying
+
+`.github/workflows/ci.yml` runs the tests on every push and pull request. When they pass on `master`, it publishes the site to GitHub Pages (Settings → Pages → Source: GitHub Actions).
 
 ## Code layout
 

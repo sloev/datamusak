@@ -392,3 +392,6 @@ $('#reset').onclick = () => {
 
 renderGlobals();
 renderSources();
+
+// Handy for debugging in the console (and used by the end-to-end tests).
+window.datamusak = { state, engine, audio, midi, map: soundMap.map, sources: SOURCES };

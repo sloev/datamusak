@@ -55,7 +55,7 @@ export function defaultMapping(src) {
     pitch: m(d.pitch, ...(d.pitchRange ?? [45, 81]), 'pitch'),
     velocity: m(d.velocity, ...(d.velocityRange ?? [40, 105]), 'velocity'),
     duration: m(d.duration, ...(d.durationRange ?? [0.2, 1.6]), 'duration'),
-    pan: m(d.pan ?? 'lon', -0.8, 0.8, 'pan'),
+    pan: m(d.pan ?? (src.geo === 'virtual' ? 'random' : 'lon'), -0.8, 0.8, 'pan'),
     bright: m(d.bright, 0.35, 0.95, 'bright'),
     options: Object.fromEntries(Object.entries(src.options || {}).map(([k, o]) => [k, o.default])),
   };
@@ -83,16 +83,28 @@ export function loadState(sources) {
 }
 
 let saveTimer;
-export function saveState(state) {
+let pending = null;
+
+function flush() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(state));
-    } catch {}
-  }, 300);
+  if (!pending) return;
+  try {
+    localStorage.setItem(KEY, JSON.stringify(pending));
+  } catch {}
+  pending = null;
 }
 
+// Debounced, but never lost: pending changes are written when the page is hidden or closed.
+export function saveState(state) {
+  pending = state;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flush, 300);
+}
+if (typeof window !== 'undefined') window.addEventListener('pagehide', flush);
+
 export function clearState() {
+  pending = null;
+  clearTimeout(saveTimer);
   try {
     localStorage.removeItem(KEY);
   } catch {}
