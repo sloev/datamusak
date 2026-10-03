@@ -16,7 +16,7 @@ const grid = (i) => ({
 });
 
 export const API = {
-  'api.energidataservice.dk': () => json({ records: Array.from({ length: 60 }, (_, i) => grid(59 - i)) }),
+  'raw.githubusercontent.com/sloev/datamusak/data/grid.json': () => json({ records: Array.from({ length: 60 }, (_, i) => grid(59 - i)) }),
   'api.open-meteo.com': () =>
     json(Array.from({ length: 15 }, (_, i) => ({ current: { temperature_2m: 5 + i, relative_humidity_2m: 80, precipitation: 0, cloud_cover: 40, pressure_msl: 1012, wind_speed_10m: i, wind_direction_10m: 250, wind_gusts_10m: i * 1.5, shortwave_radiation: 150 } }))),
   'earthquake.usgs.gov': () =>

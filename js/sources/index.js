@@ -15,7 +15,7 @@ const GEO_RANGES = {
 const SHORT = {
   'energinet-grid': 'Power grid', 'energinet-co2': 'CO₂ & wind', elpris: 'Spot price', 'dmi-weather': 'DMI weather',
   'dmi-lightning': 'Lightning', 'dmi-ocean': 'Sea level', 'open-meteo': '15 towns', 'sensor-community': 'Air quality',
-  bikeshare: 'Bike share', aircraft: 'Aircraft', ais: 'Ships', hsl: 'Helsinki transit', 'fin-trains': 'Finnish trains',
+  bikeshare: 'Bike share', aircraft: 'Sim pilots', ais: 'Ships', hsl: 'Helsinki transit', 'fin-trains': 'Finnish trains',
   wikipedia: 'Wikipedia', bluesky: 'Bluesky', usgs: 'Earthquakes', iss: 'Space station', coinbase: 'Crypto trades',
   'bitcoin-mempool': 'Bitcoin', 'nostr-notes': 'Nostr notes', 'nostr-zaps': 'Nostr zaps', 'nostr-firehose': 'Nostr firehose',
   webtorrent: 'WebTorrent', listeners: 'Listeners', gifshooter: 'gifshooter', 'custom-mqtt': 'Custom MQTT', 'random-walk': 'Test signal',
@@ -25,8 +25,8 @@ const SHORT = {
 const IDENTITY = {
   'energinet-grid': 'cable or power plant', 'energinet-co2': null, elpris: 'price area (DK1/DK2)', 'dmi-weather': 'weather station',
   'dmi-lightning': 'kind of strike', 'dmi-ocean': 'tide gauge', 'open-meteo': 'town', 'sensor-community': 'sensor',
-  bikeshare: 'bike station', aircraft: 'aircraft (transponder)', ais: 'ship (MMSI)', hsl: 'vehicle', 'fin-trains': 'train',
-  wikipedia: 'editor', bluesky: 'author', usgs: 'region', iss: null, coinbase: 'side (buy/sell)', 'bitcoin-mempool': 'sending wallet',
+  bikeshare: 'station or ~1 km neighbourhood', aircraft: 'pilot (callsign)', ais: 'ship (MMSI)', hsl: 'vehicle', 'fin-trains': 'train',
+  wikipedia: 'editor', bluesky: 'author', usgs: 'region', iss: null, coinbase: 'side (buy/sell)', 'bitcoin-mempool': 'sending address',
   'nostr-notes': 'author', 'nostr-zaps': 'zapper', 'nostr-firehose': 'author', webtorrent: 'peer', listeners: 'listener',
   gifshooter: 'painter', 'custom-mqtt': 'topic', 'random-walk': 'voice',
 };

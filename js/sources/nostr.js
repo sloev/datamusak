@@ -1,6 +1,7 @@
 // Nostr: public relays over plain WebSockets (NIP-01, no library needed). High-frequency, global.
 
-const RELAYS = ['wss://relay.damus.io', 'wss://nos.lol', 'wss://relay.primal.net'];
+// Several relays, since any one of them is often down; events are de-duplicated.
+const RELAYS = ['wss://relay.primal.net', 'wss://relay.damus.io', 'wss://nos.lol', 'wss://nostr.mom', 'wss://offchain.pub'];
 
 export const hash = (s) => {
   let h = 0;

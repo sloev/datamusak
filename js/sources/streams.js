@@ -296,25 +296,31 @@ const bitcoinTx = {
   group: 'Internet',
   geo: 'virtual',
   home: SEA.baltic,
-  transport: 'WebSocket · ws.blockchain.info',
-  link: 'https://www.blockchain.com/explorer/api/api_websocket',
-  info: 'Each new Bitcoin transaction entering the mempool. Value moved drives pitch, the number of inputs/outputs the length.',
+  transport: 'WebSocket · mempool.space',
+  link: 'https://mempool.space/docs/api/websocket',
+  info: 'Each new Bitcoin transaction entering the mempool. Value moved drives pitch, the number of inputs/outputs the length; the sending address picks the instrument.',
   fields: {
     btc: { label: 'BTC moved', log: true },
     inputs: { label: 'Inputs', min: 1, max: 20, log: true },
     outputs: { label: 'Outputs', min: 1, max: 20, log: true },
-    bytes: { label: 'Size bytes', min: 100, max: 3000, log: true },
+    bytes: { label: 'Size vbytes', min: 100, max: 3000, log: true },
+    feeRate: { label: 'Fee rate sat/vB', min: 1, max: 200, log: true },
   },
-  defaults: { pitch: 'btc', velocity: 'bytes', duration: 'outputs', bright: 'inputs', families: ['chromatic', 'fx'], register: 'high', rate: 3 },
+  defaults: { pitch: 'btc', velocity: 'bytes', duration: 'outputs', bright: 'feeRate', families: ['chromatic', 'fx'], register: 'high', rate: 3 },
   start(ctx) {
-    ctx.ws('wss://ws.blockchain.info/inv', {
-      onOpen: (s) => s.send(JSON.stringify({ op: 'unconfirmed_sub' })),
+    ctx.ws('wss://mempool.space/api/v1/ws', {
+      onOpen: (s) => s.send(JSON.stringify({ 'track-mempool': true })),
       onMessage(data) {
-        const m = JSON.parse(data);
-        if (m.op !== 'utx') return;
-        const x = m.x;
-        const btc = (x.out || []).reduce((s, o) => s + (o.value || 0), 0) / 1e8;
-        ctx.emit({ key: x.inputs?.[0]?.prev_out?.addr || x.hash, label: `tx ${btc.toFixed(4)} BTC`, values: { btc, inputs: x.vin_sz, outputs: x.vout_sz, bytes: x.size } });
+        const added = JSON.parse(data)['mempool-transactions']?.added || [];
+        for (const x of added) {
+          const btc = (x.vout || []).reduce((s, o) => s + (o.value || 0), 0) / 1e8;
+          const vbytes = x.weight ? x.weight / 4 : x.size;
+          ctx.emit({
+            key: x.vin?.[0]?.prevout?.scriptpubkey_address || x.txid,
+            label: `tx ${btc.toFixed(4)} BTC`,
+            values: { btc, inputs: x.vin?.length || 1, outputs: x.vout?.length || 1, bytes: vbytes, feeRate: vbytes && x.fee !== undefined ? x.fee / vbytes : undefined },
+          });
+        }
       },
     });
   },

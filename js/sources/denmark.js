@@ -1,7 +1,9 @@
 // Live Danish open data, all fetched straight from the browser (CORS-enabled APIs).
 import { num, inDK } from './runtime.js';
 
-const EDS = 'https://api.energidataservice.dk/dataset/PowerSystemRightNow';
+// Energi Data Service refuses cross-origin requests, so a GitHub Action mirrors it every 10 minutes
+// to the repo's `data` branch (.github/workflows/data-mirror.yml); raw.githubusercontent.com has CORS.
+const GRID_MIRROR = 'https://raw.githubusercontent.com/sloev/datamusak/data/grid.json';
 const DMI = 'https://opendataapi.dmi.dk/v2';
 const DK_BBOX = '7.5,54.4,15.6,58.0';
 
@@ -26,10 +28,16 @@ const GRID = [
   ['Exchange_Bornholm_SE', 'Bornholm ↔ Sweden', 55.55, 14.4],
 ];
 
+// newest first
 async function gridRecords(ctx, limit) {
-  const data = await ctx.fetchJSON(`${EDS}?limit=${limit}&sort=Minutes1UTC%20DESC`);
-  return data.records || [];
+  const data = await ctx.fetchJSON(GRID_MIRROR);
+  return (data.records || []).slice(0, limit);
 }
+
+const ago = (r) => {
+  const min = Math.round((Date.now() - Date.parse(r?.Minutes1UTC + 'Z')) / 60000);
+  return Number.isFinite(min) ? ` · ${min} min ago` : '';
+};
 
 const energinetGrid = {
   id: 'energinet-grid',
@@ -37,7 +45,7 @@ const energinetGrid = {
   group: 'Denmark',
   geo: 'dk',
   home: [55.56, 9.75],
-  transport: 'REST · api.energidataservice.dk (per minute)',
+  transport: 'REST · Energi Data Service via a 10-minute mirror',
   link: 'https://www.energidataservice.dk/tso-electricity/PowerSystemRightNow',
   info: 'Every production type and interconnector cable of the Danish grid, played as an arpeggio. Each note sits where the power is made or crosses the border; louder = more megawatts.',
   fields: {
@@ -51,7 +59,7 @@ const energinetGrid = {
   enabledByDefault: true,
   start(ctx) {
     const seq = ctx.sequence(0.5);
-    ctx.poll(60000, async () => {
+    ctx.poll(120000, async () => {
       const recs = await gridRecords(ctx, 5);
       const pick = (k) => recs.map((r) => num(r[k])).find((v) => v !== undefined);
       const wind = (pick('OffshoreWindPower') || 0) + (pick('OnshoreWindPower') || 0);
@@ -64,7 +72,7 @@ const energinetGrid = {
         items.push({ lat, lon, key, label: `${label}: ${Math.round(mw)} MW`, values: { mw, abs: Math.abs(mw), component, co2, windShare: prod ? wind / prod : 0 } });
       });
       seq.set(items);
-      return `${recs[0]?.Minutes1DK ?? ''} · CO₂ ${co2 ?? '?'} g/kWh`;
+      return `CO₂ ${co2 ?? '?'} g/kWh${ago(recs[0])}`;
     });
   },
 };
@@ -75,9 +83,9 @@ const energinetCo2 = {
   group: 'Denmark',
   geo: 'dk',
   home: [55.47, 8.45],
-  transport: 'REST · api.energidataservice.dk',
+  transport: 'REST · Energi Data Service via a 10-minute mirror',
   link: 'https://www.energidataservice.dk/tso-electricity/PowerSystemRightNow',
-  info: 'The last 60 minutes of the Danish grid as a looping bass line: pitch follows CO₂ intensity, loudness the wind power. The loop shifts by one note every minute.',
+  info: 'The last 60 minutes of the Danish grid as a looping bass line: pitch follows CO₂ intensity, loudness the wind power. The loop moves on as new minutes arrive (Energinet’s API blocks browsers, so a GitHub Action mirrors it every 10 minutes).',
   fields: {
     co2: { label: 'CO₂ g/kWh', min: 0, max: 300, step: 4 },
     wind: { label: 'Wind MW', min: 0, max: 6000 },
@@ -88,8 +96,9 @@ const energinetCo2 = {
   defaults: { pitch: 'co2', velocity: 'wind', duration: 'solar', bright: 'exchange', pan: 'minute', families: ['bass', 'organ'], register: 'low', rate: 4 },
   start(ctx) {
     const seq = ctx.sequence(1);
-    ctx.poll(60000, async () => {
-      const recs = (await gridRecords(ctx, 60)).reverse();
+    ctx.poll(120000, async () => {
+      const newest = await gridRecords(ctx, 60);
+      const recs = [...newest].reverse();
       seq.set(
         recs.map((r, minute) => ({
           label: `${r.Minutes1DK} CO₂ ${r.CO2Emission}`,
@@ -102,7 +111,7 @@ const energinetCo2 = {
           },
         })),
       );
-      return `${recs.length} minutes loaded`;
+      return `${recs.length} minutes loaded${ago(newest[0])}`;
     });
   },
 };
@@ -396,71 +405,124 @@ const airQuality = {
 
 // ------------------------------------------------------- Bike share (GBFS)
 
+const DOTT_CPH = 'https://gbfs.api.ridedott.com/public/v2/copenhagen/gbfs.json';
+// Donkey Republic's feed sends no CORS header, so browsers can't read it; old settings move to Dott.
+const UNREACHABLE_GBFS = /stables\.donkey\.bike/;
+const cell = (lat, lon) => `${lat.toFixed(2)},${lon.toFixed(2)}`; // ≈1 km neighbourhood
+
 const bikeShare = {
   id: 'bikeshare',
-  name: 'Bike share: bikes taken & returned',
+  name: 'Bikes & scooters: taken and parked',
   group: 'Denmark',
   geo: 'dk',
   home: [55.69, 12.53],
-  transport: 'REST · GBFS feed (Donkey Republic Copenhagen by default)',
+  transport: 'REST · GBFS feed (Dott Copenhagen by default)',
   link: 'https://github.com/MobilityData/gbfs',
-  info: 'Watches a bike-share system: every time bikes leave or arrive at a station you hear it. Paste any GBFS discovery URL to listen to another city.',
+  info: 'Watches a shared bike/scooter system: every vehicle picked up or parked is a note where it happened. Paste any GBFS discovery URL (with CORS) to listen to another city; station-based systems work too.',
   options: {
-    url: { label: 'GBFS discovery URL', type: 'text', default: 'https://stables.donkey.bike/api/public/gbfs/2/donkey_copenhagen/gbfs.json' },
+    url: { label: 'GBFS discovery URL', type: 'text', default: DOTT_CPH },
   },
   fields: {
-    delta: { label: 'Change (− taken, + returned)', min: -4, max: 4 },
-    bikes: { label: 'Bikes available', log: true },
-    fullness: { label: 'Station fullness', min: 0, max: 1 },
+    delta: { label: 'Change (− taken, + parked/returned)', min: -4, max: 4 },
+    bikes: { label: 'Vehicles here', log: true },
+    fullness: { label: 'Station fullness / battery range', min: 0, max: 1 },
   },
   defaults: { pitch: 'bikes', velocity: 'delta', duration: 'fullness', families: ['guitar', 'piano'], register: 'mid', rate: 6 },
   start(ctx) {
+    const url = UNREACHABLE_GBFS.test(ctx.options.url) ? DOTT_CPH : ctx.options.url;
     let feeds = null;
     let info = null;
-    const last = new Map();
+    let last = null;
     const interval = 60000;
     ctx.poll(interval, async () => {
       if (!feeds) {
-        const g = await ctx.fetchJSON(ctx.options.url);
-        const lang = g.data.en || g.data.da || Object.values(g.data)[0];
+        const g = await ctx.fetchJSON(url);
+        const lang = g.data.feeds ? g.data : g.data.en || g.data.da || Object.values(g.data)[0];
         feeds = Object.fromEntries(lang.feeds.map((f) => [f.name, f.url]));
-        const si = await ctx.fetchJSON(feeds.station_information);
-        info = new Map(si.data.stations.map((s) => [s.station_id, s]));
+        if (feeds.station_status) {
+          const si = await ctx.fetchJSON(feeds.station_information);
+          info = new Map(si.data.stations.map((s) => [s.station_id, s]));
+        }
       }
-      const status = await ctx.fetchJSON(feeds.station_status);
-      const events = [];
-      const first = last.size === 0;
-      for (const s of status.data.stations) {
-        const meta = info.get(s.station_id);
-        if (!meta) continue;
-        const bikes = s.num_bikes_available;
-        const prev = last.get(s.station_id);
-        last.set(s.station_id, bikes);
-        if (!first && (prev === undefined || prev === bikes)) continue;
-        const cap = meta.capacity || bikes + (s.num_docks_available || 0) || 1;
-        events.push({
-          lat: meta.lat, lon: meta.lon, key: s.station_id,
-          label: `${meta.name}: ${bikes} bikes${first ? '' : ` (${bikes - prev > 0 ? '+' : ''}${bikes - prev})`}`,
-          values: { delta: first ? 0 : bikes - prev, bikes, fullness: Math.min(1, bikes / cap) },
-        });
-      }
-      ctx.spread(first ? events.sort(byLon) : events, interval);
-      return `${status.data.stations.length} stations · ${first ? 'initial sweep' : events.length + ' changes'}`;
+      const first = !last;
+      const events = feeds.station_status ? await stations(ctx, feeds, info, (last ??= new Map()), first) : await floating(ctx, feeds, (last ??= new Map()), first);
+      ctx.spread(first ? events.sort(byLon).slice(0, 80) : events, interval);
+      return `${last.size} ${feeds.station_status ? 'stations' : 'vehicles'} · ${first ? 'initial sweep' : events.length + ' changes'}`;
     });
   },
 };
 
+async function stations(ctx, feeds, info, last, first) {
+  const status = await ctx.fetchJSON(feeds.station_status);
+  const events = [];
+  for (const s of status.data.stations) {
+    const meta = info.get(s.station_id);
+    if (!meta) continue;
+    const bikes = s.num_bikes_available;
+    const prev = last.get(s.station_id);
+    last.set(s.station_id, bikes);
+    if (!first && (prev === undefined || prev === bikes)) continue;
+    const cap = meta.capacity || bikes + (s.num_docks_available || 0) || 1;
+    events.push({
+      lat: meta.lat, lon: meta.lon, key: s.station_id,
+      label: `${meta.name}: ${bikes} bikes${first ? '' : ` (${bikes - prev > 0 ? '+' : ''}${bikes - prev})`}`,
+      values: { delta: first ? 0 : bikes - prev, bikes, fullness: Math.min(1, bikes / cap) },
+    });
+  }
+  return events;
+}
+
+// Free-floating vehicles: GBFS rotates a vehicle's id after every trip, so an id that appears was
+// just parked and an id that vanished was just picked up. The ~1 km cell is the identity.
+async function floating(ctx, feeds, last, first) {
+  const d = await ctx.fetchJSON(feeds.free_bike_status || feeds.vehicle_status);
+  const list = (d.data.bikes || d.data.vehicles || []).filter((b) => b.lat != null && !b.is_disabled);
+  const now = new Map(list.map((b) => [b.bike_id ?? b.vehicle_id, b]));
+  const perCell = new Map();
+  for (const b of list) perCell.set(cell(b.lat, b.lon), (perCell.get(cell(b.lat, b.lon)) || 0) + 1);
+  const ev = (b, delta, what) => {
+    const key = cell(b.lat, b.lon);
+    const range = num(b.current_range_meters);
+    return {
+      lat: b.lat, lon: b.lon, key,
+      label: `${what} · ${perCell.get(key) || 0} vehicles nearby${range !== undefined ? ` · ${Math.round(range / 1000)} km range` : ''}`,
+      values: { delta, bikes: perCell.get(key) || 0, fullness: range !== undefined ? Math.min(1, range / 60000) : undefined },
+    };
+  };
+  const events = [];
+  if (first) for (const b of list) events.push(ev(b, 0, 'parked'));
+  else {
+    for (const [id, b] of now) if (!last.has(id)) events.push(ev(b, 1, 'parked'));
+    for (const [id, b] of last) if (!now.has(id)) events.push(ev(b, -1, 'picked up'));
+  }
+  last.clear();
+  for (const [id, b] of now) last.set(id, b);
+  return events;
+}
+
 // ------------------------------------------------------------- Aircraft
+
+// Real ADS-B feeds (adsb.lol, adsb.fi, OpenSky, airplanes.live) all refuse browser requests, so
+// this listens to VATSIM: thousands of flight-sim pilots flying live on a shared network, with the
+// same callsigns, altitudes and headings — and CORS.
+const REGIONS = {
+  dk: { label: 'Denmark & around', bbox: [53.5, 4, 59.5, 17.5] },
+  europe: { label: 'Europe', bbox: [34, -12, 72, 35] },
+  world: { label: 'World', bbox: [-90, -180, 90, 180] },
+};
 
 const aircraft = {
   id: 'aircraft',
-  name: 'Aircraft over Denmark (ADS-B)',
-  group: 'Denmark',
-  geo: 'dk',
+  name: 'Flight-sim pilots flying live (VATSIM)',
+  group: 'World',
+  geo: 'nordic',
   home: [55.62, 12.65],
-  transport: 'REST · api.adsb.lol (fallback: OpenSky Network)',
-  link: 'https://api.adsb.lol/docs',
-  info: 'Every aircraft broadcasting its position over Denmark, played as a sweep. Altitude drives pitch, climbing/descending colours the tone.',
+  transport: 'REST · data.vatsim.net (every 15 s)',
+  link: 'https://vatsim.dev/api/data-api/get-network-data',
+  info: 'Every pilot on the VATSIM flight-simulation network over the chosen region, played as a sweep. Altitude drives pitch, climbing/descending colours the tone. (Real ADS-B feeds block browsers.)',
+  options: {
+    region: { label: 'Region', type: 'select', choices: Object.entries(REGIONS).map(([k, r]) => [k, r.label]), default: 'europe' },
+  },
   fields: {
     alt: { label: 'Altitude ft', min: 0, max: 42000 },
     speed: { label: 'Ground speed kt', min: 0, max: 560 },
@@ -469,33 +531,29 @@ const aircraft = {
   },
   defaults: { pitch: 'alt', velocity: 'speed', duration: 'track', bright: 'vrate', families: ['brass', 'lead', 'reed'], register: 'high', rate: 6 },
   start(ctx) {
-    let useOpenSky = false;
-    const interval = 20000;
+    const interval = 30000;
+    const lastAlt = new Map();
+    let lastTime = 0;
     ctx.poll(interval, async () => {
-      let planes;
-      if (!useOpenSky) {
-        try {
-          const d = await ctx.fetchJSON('https://api.adsb.lol/v2/point/56.0/11.0/250');
-          planes = (d.ac || []).map((a) => ({
-            id: a.flight?.trim() || a.hex, hex: a.hex, lat: a.lat, lon: a.lon,
-            alt: a.alt_baro === 'ground' ? 0 : num(a.alt_baro), speed: num(a.gs), track: num(a.track), vrate: num(a.baro_rate),
-          }));
-        } catch (e) {
-          useOpenSky = true;
-        }
-      }
-      if (useOpenSky) {
-        const d = await ctx.fetchJSON('https://opensky-network.org/api/states/all?lamin=54.4&lomin=7.5&lamax=58&lomax=15.6');
-        planes = (d.states || []).map((s) => ({
-          id: (s[1] || s[0]).trim(), hex: s[0], lon: s[5], lat: s[6], alt: (s[7] || 0) * 3.281, speed: (s[9] || 0) * 1.944, track: s[10], vrate: (s[11] || 0) * 196.85,
-        }));
-      }
-      planes = planes.filter((p) => p.lat != null && inDK(p.lat, p.lon)).sort(byLon);
-      ctx.spread(
-        planes.map((p) => ({ lat: p.lat, lon: p.lon, key: p.hex || p.id, label: `✈ ${p.id} ${Math.round(p.alt || 0)} ft`, values: { alt: p.alt, speed: p.speed, track: p.track, vrate: p.vrate } })),
-        interval,
-      );
-      return `${planes.length} aircraft${useOpenSky ? ' (OpenSky)' : ''}`;
+      const d = await ctx.fetchJSON('https://data.vatsim.net/v3/vatsim-data.json', { timeout: 30000 });
+      const [s, w, n, e] = (REGIONS[ctx.options.region] || REGIONS.europe).bbox;
+      const now = Date.parse(d.general?.update_timestamp) || Date.now();
+      const minutes = lastTime ? (now - lastTime) / 60000 : 0;
+      lastTime = now;
+      const planes = (d.pilots || []).filter((p) => p.latitude >= s && p.latitude <= n && p.longitude >= w && p.longitude <= e && p.groundspeed > 40);
+      const events = planes.map((p) => {
+        const prev = lastAlt.get(p.callsign);
+        const vrate = prev !== undefined && minutes > 0 ? Math.max(-6000, Math.min(6000, (p.altitude - prev) / minutes)) : 0;
+        return {
+          lat: p.latitude, lon: p.longitude, key: p.callsign,
+          label: `✈ ${p.callsign}${p.flight_plan?.arrival ? ' → ' + p.flight_plan.arrival : ''} ${Math.round(p.altitude)} ft`,
+          values: { alt: Math.max(0, p.altitude), speed: p.groundspeed, track: p.heading, vrate },
+        };
+      });
+      lastAlt.clear();
+      for (const p of planes) lastAlt.set(p.callsign, p.altitude);
+      ctx.spread(events.sort(byLon), interval);
+      return `${planes.length} pilots in the air`;
     });
   },
 };
