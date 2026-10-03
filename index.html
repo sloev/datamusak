@@ -17,59 +17,43 @@
   <script type="module" src="js/main.js"></script>
 </head>
 <body>
-  <header>
+  <header class="top">
     <h1 class="hero">
       <canvas id="logo" width="800" height="220" role="img" aria-label="datamusak"></canvas>
       <img id="logo-fallback" alt="datamusak" width="800" height="220" hidden />
     </h1>
-    <div class="deck">
-      <div class="deck-top">
-        <button id="power" class="power">▶ Start</button>
-        <button id="online" class="online" title="Peer-to-peer presence: see and hear other listeners (Trystero over Nostr relays)">● offline</button>
-      </div>
-      <div id="globals" class="globals"></div>
+    <div class="controls">
+      <button id="power" class="power">▶ PLAY</button>
+      <button id="online" class="online" title="See and hear other listeners (peer-to-peer)">○ offline</button>
+      <button id="open-settings" class="gear" aria-label="Settings">⚙</button>
     </div>
   </header>
-  <main>
-    <section class="stage">
-      <div class="map-wrap box">
-        <div id="map"></div>
-        <div class="map-views">
-          <button data-view="dk">Denmark</button><button data-view="nordic">Nordic</button><button data-view="world">World</button>
-        </div>
+  <main class="app">
+    <section class="stage" aria-label="Map and live notes">
+      <div id="map"></div>
+      <canvas id="roll" aria-hidden="true"></canvas>
+      <div class="stage-chips">
+        <button data-view="dk">DK</button><button data-view="nordic">Nordic</button><button data-view="world">World</button>
+        <button id="raw" aria-pressed="false" title="Raw data → MIDI">Raw</button>
       </div>
-      <div class="roll-wrap box"><canvas id="roll"></canvas></div>
-      <div class="log-wrap box">
-        <div class="log-head">
-          <strong>Raw data → MIDI</strong>
-          <label><input type="checkbox" id="log-played" /> only played</label>
-          <label><input type="checkbox" id="log-pause" /> pause</label>
-        </div>
-        <div id="log" class="log"></div>
-      </div>
+      <div id="log" class="log" hidden></div>
     </section>
-    <aside class="panel box">
-      <nav class="tabs">
-        <button data-tab="sources" class="active">Sources</button>
-        <button data-tab="instruments">Instruments</button>
-        <button data-tab="presets">Presets</button>
-        <button data-tab="about">About</button>
-      </nav>
-      <div id="tab-sources" class="tab"></div>
-      <div id="tab-instruments" class="tab" hidden></div>
-      <div id="tab-presets" class="tab" hidden></div>
-      <div id="tab-about" class="tab about" hidden>
-        <p><strong>datamusak</strong> listens to live open data — the Danish power grid, DMI weather stations, lightning, tide gauges, air-quality sensors, bike share, aircraft, ships on open MQTT brokers, Nostr relays, a WebTorrent swarm, Wikipedia edits, Bluesky posts and more — and turns every data point into a note.</p>
-        <p>Install it as an app from your browser menu: the shell works offline, and instruments are cached once they have been played. Your settings and presets are saved in this browser.</p>
-        <p><em>Online</em> joins a peer-to-peer room (Trystero over public Nostr relays) to count other listeners and pass played notes between you — like any WebRTC app, peers can see each other's IP address. Switch it off any time with the button in the header.</p>
-        <p>Want another data source? <a href="https://github.com/sloev/datamusak/issues/new?template=new-data-source.yml" target="_blank" rel="noopener">Suggest one</a> or read <a href="https://github.com/sloev/datamusak#adding-a-data-source" target="_blank" rel="noopener">how to add one</a>.</p>
-        <p>Each source has a <em>mapping</em>: choose which data field drives pitch, velocity, note length, stereo pan and brightness (sent as MIDI CC74), the value range for each, and which instruments it plays. Pitch is always snapped to the chosen scale. Fields without a fixed physical range learn their range automatically from recent data.</p>
-        <p>Slow data (prices, weather, grid) is played as a looping step sequence over the latest values, so it changes gradually as new data arrives. Fast streams (ships, edits, posts, trades) trigger notes directly and are limited by <em>max notes/s</em>.</p>
-        <p>Everything runs in your browser: data is fetched directly from each provider's public, CORS-enabled API or WebSocket. If a provider is down or blocks browsers, its status dot turns red — the rest keep playing.</p>
-        <p>Enable <em>MIDI out</em> to drive a DAW or hardware synth (Chrome/Edge): instrument slot <em>n</em> sends on channel <em>n</em>, drums on channel 10.</p>
-        <p><button id="reset">Reset all settings</button></p>
-      </div>
-    </aside>
+    <section class="dock" aria-label="Data sources">
+      <nav id="filters" class="filters"></nav>
+      <div id="tiles" class="tiles"></div>
+    </section>
   </main>
+  <dialog id="sheet" class="sheet"></dialog>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <filter id="rgb-split">
+      <feColorMatrix in="SourceGraphic" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r" />
+      <feOffset in="r" dx="9" result="r2" />
+      <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g" />
+      <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b" />
+      <feOffset in="b" dx="-9" result="b2" />
+      <feBlend in="r2" in2="g" mode="screen" result="rg" />
+      <feBlend in="rg" in2="b2" mode="screen" />
+    </filter>
+  </svg>
 </body>
 </html>

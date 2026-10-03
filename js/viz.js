@@ -1,5 +1,6 @@
 // Live visualizers: a scrolling piano roll of played notes and a raw data → MIDI log.
 import { noteName } from './scales.js';
+import { programName } from './instruments.js';
 
 const SPAN_MS = 10000;
 const LOW = 24;
@@ -46,7 +47,7 @@ export class PianoRoll {
     }
     g.fillStyle = '#f2f2f2';
     g.font = '10px "Titan One", system-ui, sans-serif';
-    for (let n = 36; n <= HIGH; n += 12) g.fillText(noteName(n), 4, h - (n - LOW) * rowH - 3);
+
     // notes: bubbly, black-outlined
     this.notes = this.notes.filter((n) => n.end > now - SPAN_MS);
     g.lineWidth = 1.5;
@@ -63,6 +64,10 @@ export class PianoRoll {
       g.roundRect(x0, y, x1 - x0, hh, hh / 2);
       g.fill();
       g.stroke();
+      // chrome: a white sheen on the upper half
+      g.globalAlpha *= 0.35;
+      g.fillStyle = '#fff';
+      g.fillRect(x0 + hh / 2, y + hh * 0.18, Math.max(0, x1 - x0 - hh), hh * 0.18);
       if (active) {
         g.globalAlpha = 1;
         g.beginPath();
@@ -118,10 +123,10 @@ export class EventLog {
       .map(([k, v]) => `${k}=${fmt(v)}`)
       .join(' ');
     const midi = notes.length
-      ? notes.map((n) => `${noteName(n.note)} v${n.velocity} ${n.duration.toFixed(2)}s →${n.slot + 1}`).join(', ')
+      ? notes.map((n) => `${noteName(n.note)} v${n.velocity} ${programName(n.program)}`).join(', ')
       : '·';
     div.innerHTML = `<span class="t">${t.toLocaleTimeString('en-GB')}</span><span class="dot" style="background:${src.color}"></span><span class="src"></span><span class="raw"></span><span class="midi"></span>`;
-    div.querySelector('.src').textContent = ev.label || src.name;
+    div.querySelector('.src').textContent = ev.label || src.short || src.name;
     div.querySelector('.raw').textContent = raw;
     div.querySelector('.midi').textContent = midi;
     return div;

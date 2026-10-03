@@ -1,16 +1,19 @@
-// Optional Web MIDI output: each instrument slot sends on its own channel
-// (slot 1 → ch 1 …, drum slots always on ch 10), so a DAW or hardware synth can play along.
-import { DRUMS } from './audio.js';
+// Optional Web MIDI output. Each source plays on its own channel (drums always on channel 10);
+// a program change is sent whenever the instrument on a channel changes.
+import { DRUMS } from './instruments.js';
 
 export class MidiOut {
-  constructor(state) {
+  constructor(state, sourceIds) {
     this.state = state;
     this.access = null;
     this.onChange = () => {};
+    this.program = new Map(); // channel → current program
+    // 15 melodic channels (skipping 10) shared round-robin by source order
+    this.channelOf = new Map(sourceIds.map((id, i) => [id, [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15][i % 15]]));
   }
 
   get supported() {
-    return 'requestMIDIAccess' in navigator;
+    return typeof navigator !== 'undefined' && 'requestMIDIAccess' in navigator;
   }
 
   async enable() {
@@ -29,36 +32,27 @@ export class MidiOut {
     return id && this.access ? this.access.outputs.get(id) : null;
   }
 
-  channel(slot) {
-    return this.state.slots[slot].program === DRUMS ? 9 : slot % 16 === 9 ? 15 : slot % 16;
-  }
-
-  programChange(slot) {
-    const port = this.port;
-    const program = this.state.slots[slot].program;
-    if (port && program !== DRUMS) port.send([0xc0 | this.channel(slot), program]);
-  }
-
-  sendAllPrograms() {
-    this.state.slots.forEach((_, i) => this.programChange(i));
-  }
-
   // `delayMs` is relative to now.
-  play({ slot, note, velocity, duration, bright }, delayMs) {
+  play(v, delayMs) {
     const port = this.port;
     if (!port) return;
-    const ch = this.channel(slot);
-    const level = this.state.slots[slot].mute ? 0 : this.state.slots[slot].level;
-    const vel = Math.max(1, Math.min(127, Math.round(velocity * Math.min(1, level))));
+    const ch = v.program === DRUMS ? 9 : this.channelOf.get(v.source) ?? 0;
     const t = performance.now() + Math.max(0, delayMs);
-    port.send([0xb0 | ch, 74, Math.round(bright * 127)], t);
-    port.send([0x90 | ch, note, vel], t);
-    port.send([0x80 | ch, note, 0], t + duration * 1000);
+    if (v.program !== DRUMS && this.program.get(ch) !== v.program) {
+      port.send([0xc0 | ch, v.program], t);
+      this.program.set(ch, v.program);
+    }
+    const vel = Math.max(1, Math.min(127, Math.round(v.velocity * Math.min(1, v.level ?? 1))));
+    port.send([0xb0 | ch, 74, Math.round(v.bright * 127)], t);
+    port.send([0xb0 | ch, 10, Math.round((v.pan + 1) * 63.5)], t);
+    port.send([0x90 | ch, v.note, vel], t);
+    port.send([0x80 | ch, v.note, 0], t + v.duration * 1000);
   }
 
   panic() {
     const port = this.port;
     if (!port) return;
     for (let ch = 0; ch < 16; ch++) port.send([0xb0 | ch, 123, 0]);
+    this.program.clear();
   }
 }

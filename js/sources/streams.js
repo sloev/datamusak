@@ -42,7 +42,7 @@ const ships = {
     navStat: { label: 'Navigation status', min: 0, max: 15 },
     vessel: { label: 'Vessel id (stable per ship)', min: 0, max: 999 },
   },
-  defaults: { pitch: 'vessel', velocity: 'sog', duration: 'sog', bright: 'rot', slots: [3, 6], slotMode: 'field', slotField: 'sog', rate: 1.5, pitchRange: [45, 76], durationRange: [0.8, 4] },
+  defaults: { pitch: 'cog', velocity: 'sog', duration: 'sog', bright: 'rot', families: ['pad', 'bass', 'ensemble'], register: 'low', rate: 1.5 },
   enabledByDefault: true,
   start(ctx) {
     const dk = ctx.options.region === 'dk';
@@ -52,7 +52,7 @@ const ships = {
       if (dk && !(p.lat > 53.8 && p.lat < 58.5 && p.lon > 6 && p.lon < 16)) return;
       const mmsi = topic.split('/')[1];
       ctx.emit({
-        lat: p.lat, lon: p.lon, label: `⚓ ${mmsi} ${p.sog} kn`,
+        lat: p.lat, lon: p.lon, key: mmsi, label: `⚓ ${mmsi} ${p.sog} kn`,
         values: { sog: p.sog, cog: p.cog, heading: p.heading === 511 ? undefined : p.heading, rot: Math.max(-30, Math.min(30, p.rot ?? 0)), navStat: p.navStat, vessel: hash(mmsi) },
       });
     });
@@ -80,13 +80,13 @@ const hsl = {
     accel: { label: 'Acceleration m/s²', min: -2, max: 2 },
     line: { label: 'Line (stable per line)', min: 0, max: 999 },
   },
-  defaults: { pitch: 'line', velocity: 'speed', duration: 'delay', bright: 'accel', slots: [7], rate: 5, durationRange: [0.08, 0.4] },
+  defaults: { pitch: 'heading', velocity: 'speed', duration: 'delay', bright: 'accel', families: ['drums', 'percussive'], register: 'mid', rate: 5 },
   start(ctx) {
     ctx.mqtt('wss://mqtt.hsl.fi:443/', `/hfp/v2/journey/ongoing/vp/${ctx.options.mode}/#`, (topic, payload) => {
       const v = JSON.parse(payload).VP;
       if (!v || v.lat == null) return;
       ctx.emit({
-        lat: v.lat, lon: v.long, label: `${ctx.options.mode} ${v.desi} ${v.spd} m/s`,
+        lat: v.lat, lon: v.long, key: String(v.desi), label: `${ctx.options.mode} ${v.desi} ${v.spd} m/s`,
         values: { speed: v.spd, heading: v.hdg, delay: -v.dl, accel: v.acc, line: hash(String(v.desi)) },
       });
     });
@@ -107,13 +107,13 @@ const finTrains = {
     train: { label: 'Train number (stable)', min: 0, max: 999 },
     accuracy: { label: 'GPS accuracy m', min: 0, max: 50 },
   },
-  defaults: { pitch: 'speed', velocity: 'speed', duration: 'train', slots: [1], rate: 3, durationRange: [0.15, 0.8] },
+  defaults: { pitch: 'speed', velocity: 'speed', duration: 'speed', families: ['organ', 'reed'], register: 'mid', rate: 3 },
   start(ctx) {
     ctx.mqtt('wss://rata.digitraffic.fi:443/mqtt', 'train-locations/#', (topic, payload) => {
       const p = JSON.parse(payload);
       const [lon, lat] = p.location?.coordinates || [];
       if (lat == null) return;
-      ctx.emit({ lat, lon, label: `🚆 ${p.trainNumber} ${p.speed} km/h`, values: { speed: p.speed, train: p.trainNumber % 1000, accuracy: p.accuracy } });
+      ctx.emit({ lat, lon, key: String(p.trainNumber), label: `🚆 ${p.trainNumber} ${p.speed} km/h`, values: { speed: p.speed, train: p.trainNumber % 1000, accuracy: p.accuracy } });
     });
   },
 };
@@ -139,7 +139,7 @@ const wikipedia = {
     bot: { label: 'Bot edit', min: 0, max: 1 },
     namespace: { label: 'Namespace', min: 0, max: 15 },
   },
-  defaults: { pitch: 'delta', velocity: 'size', duration: 'length', bright: 'bot', slots: [7, 0], slotMode: 'field', slotField: 'bot', rate: 6, durationRange: [0.1, 1] },
+  defaults: { pitch: 'delta', velocity: 'size', duration: 'length', bright: 'bot', families: ['piano', 'drums', 'chromatic'], register: 'wide', rate: 6 },
   enabledByDefault: true,
   start(ctx) {
     const wiki = ctx.options.wiki;
@@ -147,7 +147,7 @@ const wikipedia = {
       if (wiki !== 'all' && e.wiki !== wiki) return;
       if (e.type !== 'edit' && e.type !== 'new') return;
       const delta = (e.length?.new || 0) - (e.length?.old || 0);
-      ctx.emit({ label: `${e.wiki}: ${delta > 0 ? '+' : ''}${delta} bytes`, values: { delta, size: Math.abs(delta), length: e.length?.new || 0, bot: e.bot ? 1 : 0, namespace: e.namespace } });
+      ctx.emit({ key: e.title || e.wiki, label: `${e.wiki}: ${delta > 0 ? '+' : ''}${delta} bytes`, values: { delta, size: Math.abs(delta), length: e.length?.new || 0, bot: e.bot ? 1 : 0, namespace: e.namespace } });
     });
   },
 };
@@ -173,7 +173,7 @@ const bluesky = {
     media: { label: 'Has image/video/link card', min: 0, max: 1 },
     reply: { label: 'Is reply', min: 0, max: 1 },
   },
-  defaults: { pitch: 'chars', velocity: 'words', duration: 'chars', bright: 'tags', slots: [0, 5], slotMode: 'field', slotField: 'reply', rate: 4, durationRange: [0.1, 1.2] },
+  defaults: { pitch: 'chars', velocity: 'words', duration: 'chars', bright: 'tags', families: ['guitar', 'ethnic', 'piano'], register: 'mid', rate: 4 },
   enabledByDefault: true,
   start(ctx) {
     const lang = ctx.options.lang;
@@ -185,6 +185,7 @@ const bluesky = {
         if (lang !== 'all' && !(r.langs || []).some((l) => l.toLowerCase().startsWith(lang))) return;
         const text = r.text || '';
         ctx.emit({
+          key: m.did,
           label: `post ${text.length} chars`,
           values: { chars: text.length, words: text.split(/\s+/).filter(Boolean).length, tags: (r.facets || []).length, media: r.embed ? 1 : 0, reply: r.reply ? 1 : 0 },
         });
@@ -210,7 +211,7 @@ const earthquakes = {
     sig: { label: 'Significance', min: 0, max: 1000 },
     tsunami: { label: 'Tsunami flag', min: 0, max: 1 },
   },
-  defaults: { pitch: 'depth', invert: ['pitch'], velocity: 'mag', duration: 'mag', bright: 'sig', slots: [6, 7], slotMode: 'field', slotField: 'mag', rate: 6, pitchRange: [36, 72], durationRange: [0.1, 2.5] },
+  defaults: { pitch: 'depth', velocity: 'mag', duration: 'mag', bright: 'sig', families: ['bass', 'percussive', 'ensemble'], register: 'low', rate: 6 },
   start(ctx) {
     const seq = ctx.sequence(0.25);
     ctx.poll(5 * 60000, async () => {
@@ -220,7 +221,7 @@ const earthquakes = {
         .map((f) => {
           const [lon, lat, depth] = f.geometry.coordinates;
           const p = f.properties;
-          return { lat, lon, label: `M${p.mag} ${p.place || ''}`, values: { mag: p.mag, depth: Math.max(0, depth), sig: p.sig, tsunami: p.tsunami } };
+          return { lat, lon, key: p.net || p.place, label: `M${p.mag} ${p.place || ''}`, values: { mag: p.mag, depth: Math.max(0, depth), sig: p.sig, tsunami: p.tsunami } };
         });
       seq.set(items);
       return `${items.length} quakes`;
@@ -243,7 +244,7 @@ const iss = {
     altitude: { label: 'Altitude km', min: 400, max: 430 },
     daylight: { label: 'In daylight', min: 0, max: 1 },
   },
-  defaults: { pitch: 'distance', velocity: 'altitude', duration: 'none', bright: 'daylight', slots: [3], rate: 1, pitchRange: [48, 84], durationRange: [3, 3] },
+  defaults: { pitch: 'distance', velocity: 'altitude', duration: 'altitude', bright: 'daylight', families: ['pad', 'fx'], register: 'high', rate: 1 },
   start(ctx) {
     ctx.poll(5000, async () => {
       const d = await ctx.fetchJSON('https://api.wheretheiss.at/v1/satellites/25544');
@@ -267,12 +268,12 @@ const coinbase = {
     product: { label: 'Market', type: 'select', choices: ['BTC-USD', 'ETH-USD', 'SOL-USD', 'BTC-EUR', 'DOGE-USD'].map((p) => [p, p]), default: 'BTC-USD' },
   },
   fields: {
-    price: { label: 'Price (auto range)' },
+    price: { label: 'Price' },
     size: { label: 'Trade size', log: true },
     side: { label: 'Side (0 sell, 1 buy)', min: 0, max: 1 },
     move: { label: 'Price move vs previous', min: -1, max: 1 },
   },
-  defaults: { pitch: 'price', velocity: 'size', duration: 'size', bright: 'side', slots: [7, 1], slotMode: 'field', slotField: 'side', rate: 5, durationRange: [0.05, 0.5] },
+  defaults: { pitch: 'price', velocity: 'size', duration: 'size', bright: 'side', families: ['drums', 'lead'], register: 'mid', rate: 5 },
   start(ctx) {
     let last;
     ctx.ws('wss://ws-feed.exchange.coinbase.com', {
@@ -283,7 +284,7 @@ const coinbase = {
         const price = num(m.price);
         const move = last === undefined ? 0 : Math.sign(price - last);
         last = price;
-        ctx.emit({ label: `${m.side} ${m.size} @ ${m.price}`, values: { price, size: num(m.size), side: m.side === 'buy' ? 1 : 0, move } });
+        ctx.emit({ key: m.side, label: `${m.side} ${m.size} @ ${m.price}`, values: { price, size: num(m.size), side: m.side === 'buy' ? 1 : 0, move } });
       },
     });
   },
@@ -304,7 +305,7 @@ const bitcoinTx = {
     outputs: { label: 'Outputs', min: 1, max: 20, log: true },
     bytes: { label: 'Size bytes', min: 100, max: 3000, log: true },
   },
-  defaults: { pitch: 'btc', velocity: 'bytes', duration: 'outputs', bright: 'inputs', slots: [5], rate: 3, durationRange: [0.05, 0.6] },
+  defaults: { pitch: 'btc', velocity: 'bytes', duration: 'outputs', bright: 'inputs', families: ['chromatic', 'fx'], register: 'high', rate: 3 },
   start(ctx) {
     ctx.ws('wss://ws.blockchain.info/inv', {
       onOpen: (s) => s.send(JSON.stringify({ op: 'unconfirmed_sub' })),
@@ -313,7 +314,7 @@ const bitcoinTx = {
         if (m.op !== 'utx') return;
         const x = m.x;
         const btc = (x.out || []).reduce((s, o) => s + (o.value || 0), 0) / 1e8;
-        ctx.emit({ label: `tx ${btc.toFixed(4)} BTC`, values: { btc, inputs: x.vin_sz, outputs: x.vout_sz, bytes: x.size } });
+        ctx.emit({ key: `out${x.vout_sz}`, label: `tx ${btc.toFixed(4)} BTC`, values: { btc, inputs: x.vin_sz, outputs: x.vout_sz, bytes: x.size } });
       },
     });
   },
@@ -341,7 +342,7 @@ const customMqtt = {
     depth: { label: 'Topic depth', min: 1, max: 8 },
     topic: { label: 'Topic (stable per topic)', min: 0, max: 999 },
   },
-  defaults: { pitch: 'topic', velocity: 'bytes', duration: 'value', bright: 'count', slots: 'all', slotMode: 'field', slotField: 'topic', rate: 4, durationRange: [0.08, 0.8] },
+  defaults: { pitch: 'value', velocity: 'bytes', duration: 'count', bright: 'depth', families: 'all', register: 'wide', rate: 4 },
   start(ctx) {
     ctx.mqtt(ctx.options.url, ctx.options.topic, (topic, payload) => {
       const nums = [];
@@ -352,6 +353,7 @@ const customMqtt = {
         if (Number.isFinite(n)) nums.push(n);
       }
       ctx.emit({
+        key: topic,
         label: `${topic.slice(0, 48)} = ${payload.slice(0, 32)}`,
         values: { value: nums[0], count: nums.length, bytes: payload.length, depth: topic.split('/').length, topic: hash(topic) },
       });
@@ -367,24 +369,28 @@ function collect(v, out) {
 
 const randomWalk = {
   id: 'random-walk',
-  name: 'Offline test signal (random walk)',
+  name: 'Offline test signal',
   group: 'Custom',
   geo: 'virtual',
   home: SEA.kiel,
   transport: 'generated in the browser',
-  info: 'No network needed — a wandering random walk, handy for trying out instruments and mappings.',
+  info: 'No network needed — a deterministic wandering signal, handy for trying out instruments and mappings.',
   fields: {
-    walk: { label: 'Random walk', min: 0, max: 1 },
-    noise: { label: 'Noise', min: 0, max: 1 },
+    walk: { label: 'Wandering line', min: 0, max: 1 },
+    noise: { label: 'Chaos', min: 0, max: 1 },
     step: { label: 'Step in bar', min: 0, max: 15 },
   },
-  defaults: { pitch: 'walk', velocity: 'noise', duration: 'noise', pan: 'walk', slots: [0, 1], rate: 8, durationRange: [0.1, 0.5] },
+  defaults: { pitch: 'walk', velocity: 'noise', duration: 'noise', pan: 'walk', families: ['piano', 'chromatic'], register: 'mid', rate: 8 },
   start(ctx) {
-    let walk = 0.5;
+    // deterministic: two slow sines and a chaotic logistic map, so every run sounds the same
+    let n = 0;
+    let chaos = 0.37;
     const seq = ctx.sequence(0.25, {
       toEvent: (step) => {
-        walk = Math.min(1, Math.max(0, walk + (Math.random() - 0.5) * 0.2));
-        return { label: `walk ${walk.toFixed(2)}`, values: { walk, noise: Math.random(), step } };
+        n++;
+        chaos = 3.91 * chaos * (1 - chaos);
+        const walk = 0.5 + 0.35 * Math.sin(n * 0.21) + 0.15 * Math.sin(n * 0.047);
+        return { key: `voice${step % 4}`, label: `signal ${walk.toFixed(2)}`, values: { walk, noise: chaos, step } };
       },
     });
     seq.set([...Array(16).keys()]);

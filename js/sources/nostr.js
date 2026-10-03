@@ -91,7 +91,7 @@ const notes = {
     reply: { label: 'Is reply', min: 0, max: 1 },
     author: { label: 'Author (stable per pubkey)', min: 0, max: 999 },
   },
-  defaults: { pitch: 'author', velocity: 'chars', duration: 'words', bright: 'hashtags', slots: [0, 2, 5], slotMode: 'field', slotField: 'reply', rate: 5, durationRange: [0.06, 0.6] },
+  defaults: { pitch: 'chars', velocity: 'chars', duration: 'words', bright: 'hashtags', families: 'all', register: 'wide', rate: 5 },
   start(ctx) {
     const mode = ctx.options.filter;
     subscribe(ctx, { kinds: [1] }, (ev) => {
@@ -101,6 +101,7 @@ const notes = {
       const text = ev.content || '';
       ctx.emit({
         ...(pos || {}),
+        key: ev.pubkey,
         label: `note ${text.length} chars${pos ? ' 📍' : ''}`,
         values: { chars: text.length, words: text.split(/\s+/).filter(Boolean).length, hashtags: countTags(ev, 't'), mentions: countTags(ev, 'p'), reply: tag(ev, 'e') ? 1 : 0, author: hash(ev.pubkey || '') },
       });
@@ -122,7 +123,7 @@ const zaps = {
     comment: { label: 'Comment length', min: 0, max: 140 },
     recipient: { label: 'Recipient (stable per pubkey)', min: 0, max: 999 },
   },
-  defaults: { pitch: 'sats', velocity: 'sats', duration: 'sats', bright: 'comment', slots: [2, 5], slotMode: 'field', slotField: 'sats', rate: 4, durationRange: [0.1, 2.5] },
+  defaults: { pitch: 'sats', velocity: 'sats', duration: 'sats', bright: 'comment', families: ['chromatic', 'ensemble'], register: 'high', rate: 4 },
   start(ctx) {
     subscribe(ctx, { kinds: [9735] }, (ev) => {
       const sats = bolt11Sats(tag(ev, 'bolt11'));
@@ -131,7 +132,7 @@ const zaps = {
       try {
         comment = (JSON.parse(tag(ev, 'description') || '{}').content || '').length;
       } catch {}
-      ctx.emit({ label: `⚡ ${sats} sats`, values: { sats, comment, recipient: hash(tag(ev, 'p') || '') } });
+      ctx.emit({ key: tag(ev, 'p'), label: `⚡ ${sats} sats`, values: { sats, comment, recipient: hash(tag(ev, 'p') || '') } });
     });
   },
 };
@@ -151,10 +152,10 @@ const firehose = {
     tags: { label: 'Tag count', min: 0, max: 30, log: true },
     reaction: { label: 'Is reaction', min: 0, max: 1 },
   },
-  defaults: { pitch: 'kind', velocity: 'bytes', duration: 'tags', bright: 'reaction', slots: [7, 1, 4], slotMode: 'field', slotField: 'kind', rate: 8, durationRange: [0.04, 0.3] },
+  defaults: { pitch: 'bytes', velocity: 'bytes', duration: 'tags', bright: 'reaction', families: ['drums', 'percussive', 'sfx'], register: 'wide', rate: 8 },
   start(ctx) {
     subscribe(ctx, {}, (ev) => {
-      ctx.emit({ label: `kind ${ev.kind}`, values: { kind: ev.kind, bytes: JSON.stringify(ev).length, tags: (ev.tags || []).length, reaction: ev.kind === 7 ? 1 : 0 } });
+      ctx.emit({ key: `kind${ev.kind}`, label: `kind ${ev.kind}`, values: { kind: ev.kind, bytes: JSON.stringify(ev).length, tags: (ev.tags || []).length, reaction: ev.kind === 7 ? 1 : 0 } });
     });
   },
 };

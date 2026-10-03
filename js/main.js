@@ -1,10 +1,10 @@
 import { SOURCES, SOURCE_BY_ID } from './sources/index.js';
 import { createRuntime } from './sources/runtime.js';
-import { loadState, saveState, saveNow, clearState, defaultMapping, PARAMS, DEFAULT_SLOTS } from './state.js';
+import { loadState, saveState, saveNow, clearState, defaultMapping, PARAMS } from './state.js';
 import { SCALES, NOTE_NAMES, noteName } from './scales.js';
-import { AudioEngine, DRUMS } from './audio.js';
+import { FAMILIES, programName } from './instruments.js';
+import { AudioEngine } from './audio.js';
 import { MidiOut } from './midi.js';
-import { Normalizer } from './normalize.js';
 import { Engine } from './engine.js';
 import { SoundMap } from './map.js';
 import { PianoRoll, EventLog } from './viz.js';
@@ -13,25 +13,25 @@ import { presence } from './presence.js';
 import { BUILTIN, snapshot, applySnapshot, shareUrl, decode, presetFromHash, localPresets, saveLocalPreset, deleteLocalPreset } from './presets.js';
 
 const state = loadState(SOURCES);
+const save = () => saveState(state);
 
 // A shared preset link (#p=…) replaces the current setup once, then the hash is cleared.
+let notice = '';
 const linked = presetFromHash();
-let linkedNotice = '';
 if (linked) {
   try {
     applySnapshot(state, SOURCES, await decode(linked));
     saveNow(state);
-    linkedNotice = 'Loaded the preset from your link.';
+    notice = 'Loaded the preset from your link.';
   } catch {
-    linkedNotice = 'That preset link looks broken — kept your own settings.';
+    notice = 'That preset link looks broken — kept your own settings.';
   }
   history.replaceState(null, '', location.pathname + location.search);
 }
-const save = () => saveState(state);
+
 const audio = new AudioEngine(state);
-const midi = new MidiOut(state);
-const normalizer = new Normalizer();
-const engine = new Engine({ state, audio, midi, normalizer });
+const midi = new MidiOut(state, SOURCES.map((s) => s.id));
+const engine = new Engine({ state, audio, midi });
 
 const $ = (sel) => document.querySelector(sel);
 function h(tag, attrs = {}, ...children) {
@@ -48,30 +48,52 @@ function h(tag, attrs = {}, ...children) {
   return el;
 }
 const select = (choices, value, onchange, attrs = {}) =>
-  h('select', { onchange: (e) => onchange(e.target.value), ...attrs },
-    choices.map(([v, label]) => h('option', { value: v, selected: String(v) === String(value) }, label)));
+  h('select', { onchange: (e) => onchange(e.target.value), ...attrs }, choices.map(([v, label]) => h('option', { value: v, selected: String(v) === String(value) }, label)));
 const slider = (min, max, step, value, oninput, attrs = {}) =>
   h('input', { type: 'range', min, max, step, value, oninput: (e) => oninput(parseFloat(e.target.value)), ...attrs });
-const numberInput = (min, max, step, value, onchange, attrs = {}) =>
-  h('input', { type: 'number', min, max, step, value, onchange: (e) => onchange(parseFloat(e.target.value)), ...attrs });
+const row = (label, ...control) => h('label', { class: 'row' }, h('span', {}, label), ...control);
+const chips = (items, isOn, toggle, attrs = {}) =>
+  h('div', { class: 'chips', ...attrs }, items.map(([id, label]) => h('button', { class: 'chip' + (isOn(id) ? ' on' : ''), 'aria-pressed': String(isOn(id)), onclick: () => toggle(id) }, label)));
 
-// ----------------------------------------------------------- visualizers
+// Brief VHS glitch on interactions (RGB split + tears), never constant.
+function glitch() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  document.body.classList.remove('glitching');
+  void document.body.offsetWidth;
+  document.body.classList.add('glitching');
+  setTimeout(() => document.body.classList.remove('glitching'), 260);
+}
+
+// ------------------------------------------------------------- the stage
 
 const roll = new PianoRoll($('#roll'));
 const log = new EventLog($('#log'));
-const soundMap = new SoundMap($('#map'), SOURCES, { onSelect: (id) => focusSource(id) });
+const soundMap = new SoundMap($('#map'), SOURCES, { onSelect: (id) => openSource(id) });
+const lastHit = new Map();
 engine.on((out) => {
   log.add(out);
   soundMap.pulse(out.src, out.ev, out.notes);
   for (const n of out.notes) roll.add(out.src, n);
-  // pass our own notes on to other listeners (never echo theirs back)
-  if (out.notes.length && out.src.id !== 'listeners') presence.share({ ...out.notes[0], source: out.src.id });
+  if (!out.notes.length) return;
+  if (out.src.id !== 'listeners') presence.share(out.notes[0]);
+  // the source's tile bounces on its notes (+10% pulse, low cadence)
+  const t = performance.now();
+  if (t - (lastHit.get(out.src.id) || 0) > 140) {
+    lastHit.set(out.src.id, t);
+    setTimeout(() => tileOf(out.src.id)?.animate([{ scale: 1.1 }, { scale: 1.04 }, { scale: 1 }], { duration: 200, easing: 'steps(3)' }), out.notes[0].delayMs);
+  }
 });
+document.querySelectorAll('[data-view]').forEach((b) => (b.onclick = () => soundMap.view(b.dataset.view)));
+$('#raw').onclick = () => {
+  const show = $('#log').hidden;
+  $('#log').hidden = !show;
+  $('#raw').classList.toggle('on', show);
+  $('#raw').setAttribute('aria-pressed', String(show));
+};
 
 // ------------------------------------------------------------------ logo
 
-const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const logo = mountLogo($('#logo'), { still: reduceMotion });
+const logo = mountLogo($('#logo'), { still: matchMedia('(prefers-reduced-motion: reduce)').matches });
 if (!logo) {
   $('#logo').hidden = true;
   $('#logo-fallback').src = 'assets/logo.png';
@@ -80,29 +102,7 @@ if (!logo) {
 const beatVar = () => document.documentElement.style.setProperty('--beat', `${60 / state.global.bpm}s`);
 beatVar();
 
-// ---------------------------------------------------------------- online
-
-function renderOnline() {
-  const b = $('#online');
-  const on = presence.connected;
-  b.classList.toggle('on', on);
-  b.textContent = on ? `● ${presence.peers + 1} online` : '○ offline';
-}
-presence.on(renderOnline);
-$('#online').onclick = async () => {
-  state.global.online = !presence.connected;
-  save();
-  if (state.global.online) await presence.join();
-  else presence.leave();
-  renderOnline();
-};
-// join after the page has settled, so presence never slows the first paint
-if (state.global.online) setTimeout(() => presence.join().then(renderOnline).catch(renderOnline), 1500);
-$('#log-pause').onchange = (e) => (log.paused = e.target.checked);
-$('#log-played').onchange = (e) => (log.onlyPlayed = e.target.checked);
-document.querySelectorAll('.map-views button').forEach((b) => (b.onclick = () => soundMap.view(b.dataset.view)));
-
-// ---------------------------------------------------------- source runtime
+// ------------------------------------------------------- source runtime
 
 let powered = false;
 const running = new Map();
@@ -117,40 +117,47 @@ function startSource(src) {
   });
   running.set(src.id, rt);
   try {
-    src.start(rt.ctx);
+    const r = src.start(rt.ctx);
+    if (r?.catch) r.catch((e) => setStatus(src.id, 'error', e.message));
   } catch (e) {
     setStatus(src.id, 'error', e.message);
   }
 }
-
 function stopSource(id) {
   running.get(id)?.stop();
   running.delete(id);
   setStatus(id, 'idle', '');
 }
-
 function restartSource(src) {
   stopSource(src.id);
-  normalizer.reset(src.id);
   if (powered && state.sources[src.id].enabled) startSource(src);
 }
-
+function setEnabled(src, on) {
+  state.sources[src.id].enabled = on;
+  soundMap.setEnabled(src.id, on);
+  if (powered) on ? startSource(src) : stopSource(src.id);
+  save();
+  renderTile(src);
+}
 function setStatus(id, kind, msg) {
   statusOf.set(id, { kind, msg });
-  const card = document.querySelector(`.source[data-id="${id}"]`);
-  if (!card) return;
-  card.querySelector('.status').className = 'status ' + kind;
-  card.querySelector('.status-msg').textContent = msg || (kind === 'idle' ? '' : kind);
+  renderTile(SOURCE_BY_ID[id]);
+  const live = document.querySelector(`#sheet [data-status="${id}"]`);
+  if (live) live.replaceWith(statusLine(id));
 }
+const statusLine = (id) => {
+  const st = statusOf.get(id) || { kind: 'idle', msg: '' };
+  return h('p', { class: 'status-line', 'data-status': id }, h('span', { class: 'status ' + st.kind }), ' ', st.msg || (powered ? '' : 'press PLAY to connect'));
+};
 
 $('#power').onclick = async () => {
   powered = !powered;
-  $('#power').textContent = powered ? '■ Stop' : '▶ Start';
-  $('#power').classList.toggle('on', powered);
+  glitch();
   logo?.glitch();
+  $('#power').textContent = powered ? '■ STOP' : '▶ PLAY';
+  $('#power').classList.toggle('on', powered);
   if (powered) {
     await audio.start();
-    midi.sendAllPrograms();
     for (const src of SOURCES) if (state.sources[src.id].enabled) startSource(src);
   } else {
     for (const id of [...running.keys()]) stopSource(id);
@@ -159,361 +166,204 @@ $('#power').onclick = async () => {
   }
 };
 
-// --------------------------------------------------------------- globals
+// ----------------------------------------------------------------- tiles
 
-function renderGlobals() {
-  const g = state.global;
-  const set = (k, after) => (v) => {
-    g[k] = v;
-    audio.applyGlobals();
-    after && after();
-    save();
-  };
-  const field = (label, control) => h('label', { class: 'g' }, h('span', {}, label), control);
-  const midiControl = midi.supported
-    ? midi.access
-      ? select([['', '— none —'], ...midi.outputs().map((o) => [o.id, o.name])], g.midiOut, (v) => {
-          g.midiOut = v;
-          midi.sendAllPrograms();
-          save();
-        })
-      : h('button', { onclick: () => midi.enable().catch((e) => alert('MIDI unavailable: ' + e.message)) }, 'Enable')
-    : h('span', { class: 'muted' }, 'not supported');
-  // The essentials stay in view; everything else folds away under "Advanced".
-  const advanced = h('details', { class: 'advanced', open: advancedOpen, ontoggle: (e) => (advancedOpen = e.target.open) },
-    h('summary', {}, 'Advanced'),
-    h('div', { class: 'globals' },
-      field('Grid', select(['off', '1/4', '1/8', '1/16', '1/32'].map((q) => [q, q]), g.quantize, set('quantize'))),
-      field('Tone', slider(0, 1, 0.01, g.tone, set('tone'))),
-      field('Reverb', slider(0, 1.5, 0.01, g.reverb, set('reverb'))),
-      field('Delay', slider(0, 0.8, 0.01, g.delayMix, set('delayMix'))),
-      field('Feedback', slider(0, 0.85, 0.01, g.delayFeedback, set('delayFeedback'))),
-      field('Delay time', select([[0.25, '1/16'], [0.5, '1/8'], [0.75, '3/16'], [1, '1/4'], [1.5, '3/8'], [2, '1/2']], g.delayBeats, (v) => set('delayBeats')(parseFloat(v)))),
-      field('Polyphony', numberInput(4, 128, 1, g.maxPolyphony, set('maxPolyphony'), { class: 'n3' })),
-      field('Built-in synth', h('input', { type: 'checkbox', checked: g.internal, onchange: (e) => set('internal')(e.target.checked) })),
-      field('MIDI out', midiControl),
-    ),
-  );
-  $('#globals').replaceChildren(
-    field('BPM', numberInput(30, 240, 1, g.bpm, set('bpm', beatVar), { class: 'n3' })),
-    field('Key', select(NOTE_NAMES.map((n, i) => [i, n]), g.root, (v) => set('root')(parseInt(v)))),
-    field('Scale', select(Object.entries(SCALES).map(([id, s]) => [id, s.name]), g.scale, set('scale'))),
-    field('Master', slider(0, 1.2, 0.01, g.master, set('master'))),
-    advanced,
-  );
+const GROUPS = [...new Set(SOURCES.map((s) => s.group))];
+let filter = 'All';
+
+function renderFilters() {
+  const items = ['All', 'On', ...GROUPS].map((g) => [g, g === 'Peer to peer' ? 'P2P' : g]);
+  $('#filters').replaceChildren(chips(items, (g) => g === filter, (g) => {
+    filter = g;
+    renderFilters();
+    renderTiles();
+  }, { role: 'toolbar', 'aria-label': 'Filter sources' }));
 }
-let advancedOpen = false;
-midi.onChange = renderGlobals;
+const visible = (src) => filter === 'All' || (filter === 'On' ? state.sources[src.id].enabled : src.group === filter);
+const tileOf = (id) => document.querySelector(`.tile[data-id="${id}"]`);
 
-// ---------------------------------------------------------------- sources
-
-const slotChoices = () => state.slots.map((s, i) => [i, `${i + 1} ${s.name}`]);
-
-function renderSources() {
-  const root = $('#tab-sources');
-  root.replaceChildren(
-    h('p', { class: 'hint' }, 'Tick a source to listen. Click a name (or its circle on the map) to edit how its data becomes music.'),
-  );
-  let group;
-  SOURCES.forEach((src, i) => {
-    if (src.group !== group) {
-      group = src.group;
-      root.append(h('h3', {}, group));
-    }
-    const card = sourceCard(src);
-    card.style.setProperty('--i', i);
-    root.append(card);
-  });
-}
-
-function sourceCard(src) {
-  const cfg = state.sources[src.id];
-  const st = statusOf.get(src.id) || { kind: 'idle', msg: '' };
-  const body = h('div', { class: 'mapping', hidden: true });
-  const card = h('div', { class: 'source', 'data-id': src.id, style: `--c:${src.color}` },
-    h('div', { class: 'source-head' },
-      h('input', {
-        type: 'checkbox', checked: cfg.enabled, title: 'Listen to this source',
-        onchange: (e) => {
-          cfg.enabled = e.target.checked;
-          soundMap.setEnabled(src.id, cfg.enabled);
-          if (powered) cfg.enabled ? startSource(src) : stopSource(src.id);
-          save();
-        },
-      }),
-      h('span', { class: 'swatch' }),
-      h('button', { class: 'name', onclick: () => toggleMapping(card) }, src.name),
-      h('span', { class: 'rate', title: 'events per minute' }),
-      h('span', { class: 'status ' + st.kind, title: 'idle / connecting / ok / error' }),
-    ),
-    h('div', { class: 'source-sub' }, h('span', {}, src.transport), ' ', h('span', { class: 'status-msg' }, st.msg)),
-    body,
-  );
-  soundMap.setEnabled(src.id, cfg.enabled);
-  return card;
-}
-
-function toggleMapping(card, force) {
-  const body = card.querySelector('.mapping');
-  const open = force ?? body.hidden;
-  body.hidden = !open;
-  card.classList.toggle('open', open);
-  if (open) renderMapping(SOURCE_BY_ID[card.dataset.id], body);
-}
-
-function focusSource(id) {
-  showTab('sources');
-  const card = document.querySelector(`.source[data-id="${id}"]`);
-  toggleMapping(card, true);
-  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  card.classList.add('flash');
-  setTimeout(() => card.classList.remove('flash'), 900);
-}
-
-function renderMapping(src, body) {
-  const cfg = state.sources[src.id];
-  const rerender = () => renderMapping(src, body);
-  const fieldChoices = [['none', '— fixed (middle) —'], ...Object.entries(src.allFields).map(([k, f]) => [k, f.label])];
-
-  const options = Object.entries(src.options || {}).map(([k, o]) =>
-    h('label', { class: 'row' }, h('span', {}, o.label),
-      o.type === 'select'
-        ? select(o.choices, cfg.options[k], (v) => {
-            cfg.options[k] = v;
-            save();
-            restartSource(src);
-          })
-        : h('input', {
-            type: 'text', value: cfg.options[k], class: 'wide',
-            onchange: (e) => {
-              cfg.options[k] = e.target.value.trim();
-              save();
-              restartSource(src);
-            },
-          })),
-  );
-
-  const paramRow = (name) => {
-    const p = PARAMS[name];
-    const m = cfg[name];
-    const hint = name === 'pitch' ? (v) => noteName(Math.round(v)) : null;
-    const bound = (key) => {
-      const hintEl = hint ? h('small', {}, hint(m[key])) : null;
-      const input = numberInput(p.min, p.max, p.step, m[key], (v) => {
-        m[key] = Math.min(p.max, Math.max(p.min, v));
-        if (hintEl) hintEl.textContent = hint(m[key]);
-        save();
-      }, { class: 'n4' });
-      return h('span', { class: 'bound' }, input, hintEl);
-    };
-    return h('tr', {},
-      h('th', {}, p.label),
-      h('td', {}, select(fieldChoices, m.field, (v) => { m.field = v; save(); })),
-      h('td', {}, bound('lo')),
-      h('td', {}, bound('hi')),
-      h('td', {}, h('input', { type: 'checkbox', checked: m.invert, title: 'invert', onchange: (e) => { m.invert = e.target.checked; save(); } })),
-    );
-  };
-
-  const allSlots = cfg.slots === 'all';
-  const slotChips = h('div', { class: 'chips' },
-    h('label', { class: 'chip' + (allSlots ? ' on' : '') },
-      h('input', { type: 'checkbox', checked: allSlots, onchange: (e) => { cfg.slots = e.target.checked ? 'all' : [0]; save(); rerender(); } }), 'All'),
-    state.slots.map((s, i) => {
-      const on = allSlots || cfg.slots.includes(i);
-      return h('label', { class: 'chip' + (on ? ' on' : ''), title: s.program === DRUMS ? 'drum kit' : '' },
-        h('input', {
-          type: 'checkbox', checked: on, disabled: allSlots,
-          onchange: (e) => {
-            const set = new Set(cfg.slots);
-            e.target.checked ? set.add(i) : set.delete(i);
-            cfg.slots = [...set].sort((a, b) => a - b);
-            save();
-            rerender();
-          },
-        }),
-        `${i + 1} ${s.name}`);
+function renderTiles() {
+  const list = SOURCES.filter(visible);
+  $('#tiles').replaceChildren(
+    ...list.map((src, i) => {
+      const el = h('div', { class: 'tile', 'data-id': src.id, style: `--c:${src.color};--fg:${src.ink};--sh:${src.shadow};--i:${i}` });
+      fillTile(el, src);
+      return el;
     }),
+    list.length ? null : h('p', { class: 'empty' }, filter === 'On' ? 'Nothing is on yet — tap a source to switch it on.' : 'No sources here.'),
   );
+}
+function fillTile(el, src) {
+  const cfg = state.sources[src.id];
+  const st = statusOf.get(src.id) || { kind: 'idle' };
+  const rate = engine.eventsPerMinute(src.id);
+  el.classList.toggle('on', cfg.enabled);
+  el.replaceChildren(
+    h('button', { class: 'tile-main', 'aria-pressed': String(cfg.enabled), title: cfg.enabled ? 'Switch off' : 'Switch on', onclick: () => setEnabled(src, !cfg.enabled) },
+      h('span', { class: 'sticker' }),
+      h('span', { class: 'tile-name' }, src.short || src.name),
+      h('span', { class: 'tile-sub' }, h('span', { class: 'status ' + st.kind }), cfg.enabled ? (rate ? `${rate}/min` : st.kind === 'error' ? 'unreachable' : powered ? 'listening…' : 'on') : 'off'),
+      h('span', { class: 'meter', style: `--m:${Math.min(1, rate / 120)}` })),
+    h('button', { class: 'tile-more', 'aria-label': `Settings for ${src.name}`, onclick: () => openSource(src.id) }, '⋯'),
+  );
+}
+function renderTile(src) {
+  const el = src && tileOf(src.id);
+  if (el) fillTile(el, src);
+}
+setInterval(() => SOURCES.forEach((s) => state.sources[s.id].enabled && renderTile(s)), 2000);
 
-  const parts = [
+// ----------------------------------------------------------------- sheet
+
+const sheet = $('#sheet');
+function openSheet(title, color, shadow, ...content) {
+  glitch();
+  sheet.style.setProperty('--c', color || 'var(--ye)');
+  sheet.style.setProperty('--sh', shadow || 'var(--pk)');
+  sheet.replaceChildren(
+    h('header', { class: 'sheet-head' }, h('h2', {}, title), h('button', { class: 'close', 'aria-label': 'Close', onclick: () => sheet.close() }, '✕')),
+    h('div', { class: 'sheet-body' }, ...content.filter(Boolean)),
+  );
+  if (!sheet.open) sheet.showModal();
+}
+sheet.addEventListener('click', (e) => e.target === sheet && sheet.close());
+
+function openSource(id) {
+  const src = SOURCE_BY_ID[id];
+  const cfg = state.sources[id];
+  const re = () => openSource(id);
+  const fieldChoices = [['none', '— nothing —'], ...Object.entries(src.allFields).map(([k, f]) => [k, f.label])];
+  const famOn = (f) => cfg.families === 'all' || cfg.families.includes(f);
+  openSheet(src.name, src.color, src.shadow,
+    statusLine(id),
     h('p', { class: 'info' }, src.info, ' ', src.link ? h('a', { href: src.link, target: '_blank', rel: 'noopener' }, 'about the data ↗') : null),
-    options.length ? h('div', { class: 'opts' }, options) : null,
-    h('table', { class: 'params' },
-      h('thead', {}, h('tr', {}, h('th', {}), h('th', {}, 'data field'), h('th', {}, 'low'), h('th', {}, 'high'), h('th', {}, 'inv'))),
-      h('tbody', {}, Object.keys(PARAMS).map(paramRow)),
-    ),
-    h('div', { class: 'sub' }, h('strong', {}, 'Instruments'), slotChips,
-      h('label', { class: 'row' }, h('span', {}, 'choose instrument by'),
-        select([['cycle', 'taking turns'], ['random', 'random'], ['field', 'data field →']], cfg.slotMode, (v) => { cfg.slotMode = v; save(); rerender(); }),
-        cfg.slotMode === 'field' ? select(fieldChoices.slice(1), cfg.slotField, (v) => { cfg.slotField = v; save(); }) : null),
-    ),
-    h('div', { class: 'grid2' },
-      h('label', { class: 'row' }, h('span', {}, 'Scale'),
-        select([['global', '(global)'], ...Object.entries(SCALES).map(([id, s]) => [id, s.name])], cfg.scale, (v) => { cfg.scale = v; save(); })),
-      h('label', { class: 'row' }, h('span', {}, 'Harmony'),
-        select([['none', 'single note'], ['third', '+ third'], ['fifth', '+ fifth'], ['triad', 'triad'], ['octave', '+ octave'], ['spread', 'fifth + octave']], cfg.harmony, (v) => { cfg.harmony = v; save(); })),
-      h('label', { class: 'row' }, h('span', {}, 'Level'), slider(0, 1.5, 0.01, cfg.level, (v) => { cfg.level = v; save(); })),
-      h('label', { class: 'row' }, h('span', {}, 'Max notes/s'), numberInput(0.1, 50, 0.1, cfg.rate, (v) => { cfg.rate = v; save(); }, { class: 'n4' })),
-      h('label', { class: 'row' }, h('span', {}, 'Chance'), slider(0, 1, 0.01, cfg.chance, (v) => { cfg.chance = v; save(); })),
-      h('button', {
-        onclick: () => {
-          const d = defaultMapping(src);
-          Object.assign(cfg, { ...d, enabled: cfg.enabled, options: cfg.options });
-          save();
-          rerender();
-        },
-      }, 'Reset mapping'),
-    ),
-  ];
-  body.replaceChildren(...parts.filter(Boolean));
-}
-
-setInterval(() => {
-  for (const src of SOURCES) {
-    const el = document.querySelector(`.source[data-id="${src.id}"] .rate`);
-    if (el) {
-      const n = engine.eventsPerMinute(src.id);
-      el.textContent = n ? `${n}/min` : '';
-    }
-  }
-}, 2000);
-
-// ------------------------------------------------------------ instruments
-
-const programChoices = () => [[DRUMS, '🥁 Drum kit'], ...audio.instrumentNames().map((n, i) => [i, `${i + 1} ${n}`])];
-
-function renderInstruments() {
-  const root = $('#tab-instruments');
-  root.replaceChildren(
-    h('p', { class: 'hint' }, 'Instrument slots. Each source plays on the slots ticked in its mapping. With MIDI out, slot n sends on channel n (drums on 10).'),
-    ...state.slots.map((s, i) => slotCard(s, i)),
-    h('div', { class: 'row' },
-      state.slots.length < 16 ? h('button', { onclick: () => { state.slots.push({ ...DEFAULT_SLOTS[0], name: 'Slot ' + (state.slots.length + 1) }); audio.ensureSlot(state.slots.length - 1); save(); renderInstruments(); } }, '+ add instrument') : null,
-      state.slots.length > 1 ? h('button', { onclick: () => { state.slots.pop(); save(); renderInstruments(); } }, '− remove last') : null,
-    ),
+    h('button', { class: 'pop listen' + (cfg.enabled ? ' on' : ''), onclick: () => { setEnabled(src, !cfg.enabled); re(); } }, cfg.enabled ? '■ LISTENING' : '▶ LISTEN'),
+    ...Object.entries(src.options || {}).map(([k, o]) =>
+      row(o.label, o.type === 'select'
+        ? select(o.choices, cfg.options[k], (v) => { cfg.options[k] = v; save(); restartSource(src); })
+        : h('input', { type: 'text', value: cfg.options[k], onchange: (e) => { cfg.options[k] = e.target.value.trim(); save(); restartSource(src); } }))),
+    h('h3', {}, 'Instruments'),
+    h('p', { class: 'hint' }, 'Each station, ship, author… gets its own instrument from these, always the same one.'),
+    chips([['all', 'ALL 128'], ...FAMILIES.map((f) => [f.id, f.name])], (f) => (f === 'all' ? cfg.families === 'all' : cfg.families !== 'all' && famOn(f)), (f) => {
+      if (f === 'all') cfg.families = cfg.families === 'all' ? defaultMapping(src).families : 'all';
+      else {
+        const set = new Set(cfg.families === 'all' ? [] : cfg.families);
+        set.has(f) ? set.delete(f) : set.add(f);
+        cfg.families = set.size ? [...set] : [f];
+      }
+      save();
+      re();
+    }),
+    h('h3', {}, 'Range'),
+    chips([['low', 'Low'], ['mid', 'Mid'], ['high', 'High'], ['wide', 'Wide']], (r) => cfg.register === r, (r) => { cfg.register = r; save(); re(); }),
+    row('Volume', slider(0, 1.5, 0.01, cfg.volume, (v) => { cfg.volume = v; save(); })),
+    row('Busy', slider(0.5, 20, 0.5, cfg.rate, (v) => { cfg.rate = v; save(); }), h('small', {}, 'max notes per second')),
+    h('details', { class: 'more' },
+      h('summary', {}, 'Which data drives what'),
+      ...Object.entries(PARAMS).map(([p, label]) => row(label, select(fieldChoices, cfg.map[p], (v) => { cfg.map[p] = v; save(); }))),
+      h('button', { onclick: () => { state.sources[id] = { ...defaultMapping(src), enabled: cfg.enabled, options: cfg.options }; save(); re(); } }, 'Reset this source')),
   );
 }
 
-function slotCard(s, i) {
-  const upd = (k) => (v) => {
-    s[k] = v;
-    audio.applySlot(i);
-    save();
-  };
-  return h('div', { class: 'slot', 'data-slot': i },
-    h('div', { class: 'row' },
-      h('strong', {}, i + 1),
-      h('input', { type: 'text', value: s.name, class: 'slot-name', onchange: (e) => { s.name = e.target.value; save(); } }),
-      select(programChoices(), s.program, (v) => {
-        s.program = v === DRUMS ? DRUMS : parseInt(v);
-        audio.loadSlot(i);
-        midi.programChange(i);
-        save();
-      }),
-      h('span', { class: 'slot-status' }),
-    ),
-    h('div', { class: 'row' },
-      h('label', {}, 'level ', slider(0, 1.2, 0.01, s.level, upd('level'))),
-      h('label', {}, 'pan ', slider(-1, 1, 0.05, s.pan, upd('pan'))),
-      h('label', {}, 'octave ', select([-3, -2, -1, 0, 1, 2, 3].map((o) => [o, o > 0 ? '+' + o : o]), s.octave, (v) => upd('octave')(parseInt(v)))),
-      h('label', {}, h('input', { type: 'checkbox', checked: s.mute, onchange: (e) => upd('mute')(e.target.checked) }), ' mute'),
-      h('button', {
-        title: 'play a test note',
-        onclick: async () => {
-          await audio.start();
-          const when = audio.ctx.currentTime + 0.05;
-          const note = s.program === DRUMS ? 38 : 60 + 12 * s.octave;
-          audio.play({ slot: i, note, velocity: 100, duration: 0.8, pan: 0, bright: 0.8, when });
-          midi.play({ slot: i, note, velocity: 100, duration: 0.8, bright: 0.8 }, 50);
-        },
-      }, '♪ test'),
-    ),
-  );
-}
+// ------------------------------------------------------------- settings
 
-audio.onSlotStatus = (i, status) => {
-  const el = document.querySelector(`.slot[data-slot="${i}"] .slot-status`);
-  if (el) el.textContent = status === 'loading' ? 'loading…' : '';
-};
-
-// ------------------------------------------------------------------ tabs
-
-function showTab(name) {
-  document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
-  document.querySelectorAll('.tab').forEach((t) => (t.hidden = t.id !== 'tab-' + name));
-  if (name === 'instruments') renderInstruments();
-  if (name === 'presets') renderPresets();
-}
-
-// --------------------------------------------------------------- presets
-
-function renderPresets(message = linkedNotice) {
-  linkedNotice = '';
-  const root = $('#tab-presets');
-  const load = (snap) => {
-    applySnapshot(state, SOURCES, snap);
-    saveNow(state);
-    location.reload();
-  };
-  const nameInput = h('input', { type: 'text', placeholder: 'name this setup', class: 'preset-name', maxlength: 40 });
-  const status = h('p', { class: 'preset-msg', role: 'status' }, message || '');
+function openSettings(open = 'music', message = notice) {
+  notice = '';
+  const g = state.global;
+  const set = (k, after) => (v) => { g[k] = v; audio.applyGlobals(); after?.(); save(); };
+  const section = (id, title, ...content) => h('details', { class: 'more', open: id === open }, h('summary', {}, title), ...content);
+  const load = (snap) => { applySnapshot(state, SOURCES, snap); saveNow(state); location.reload(); };
+  const msg = h('p', { class: 'msg', role: 'status' }, message || '');
+  const name = h('input', { type: 'text', placeholder: 'name this setup', maxlength: 40 });
   const mine = Object.entries(localPresets()).sort((a, b) => b[1].saved - a[1].saved);
-  root.replaceChildren(
-    h('p', { class: 'hint' }, 'A preset is the whole setup: sources, mappings, instruments and global settings. Loading one reloads the page.'),
-    status,
-    h('h3', {}, 'Share'),
-    h('div', { class: 'row' },
-      h('button', {
+  openSheet('Settings', 'var(--ye)', 'var(--pk)',
+    msg,
+    section('music', 'Music',
+      row('Key', select(NOTE_NAMES.map((n, i) => [i, n]), g.root, (v) => set('root')(parseInt(v)))),
+      row('Scale', select(Object.entries(SCALES).map(([id, s]) => [id, s.name]), g.scale, set('scale'))),
+      row('Tempo', slider(50, 180, 1, g.bpm, set('bpm', beatVar)), h('output', {}, g.bpm)),
+      row('Grid', select([['off', 'free'], ['1/8', '1/8'], ['1/16', '1/16'], ['1/32', '1/32']], g.quantize, set('quantize')))),
+    section('sound', 'Sound',
+      row('Volume', slider(0, 1.2, 0.01, g.master, set('master'))),
+      row('Reverb', slider(0, 1.5, 0.01, g.reverb, set('reverb'))),
+      row('Echo', slider(0, 0.8, 0.01, g.delayMix, set('delayMix'))),
+      row('Brightness', slider(0, 1, 0.01, g.tone, set('tone')))),
+    section('mixer', 'Instrument mixer',
+      h('p', { class: 'hint' }, 'Level per instrument family, for every source. Tap a name to hear it.'),
+      h('div', { class: 'mixer' }, FAMILIES.map((f) => {
+        const s = g.families[f.id];
+        return h('div', { class: 'fader' },
+          h('button', { class: 'fam', onclick: () => audio.audition(f.id) }, f.name),
+          slider(0, 1.2, 0.01, s.level, (v) => { s.level = v; audio.applyGlobals(); save(); }),
+          h('label', { class: 'mute' }, h('input', { type: 'checkbox', checked: s.mute, onchange: (e) => { s.mute = e.target.checked; audio.applyGlobals(); save(); } }), 'mute'));
+      }))),
+    section('presets', 'Presets',
+      h('div', { class: 'row' }, h('button', {
         class: 'pop',
         onclick: async () => {
           const url = await shareUrl(snapshot(state, SOURCES));
           try {
             if (navigator.share && matchMedia('(pointer: coarse)').matches) await navigator.share({ title: 'datamusak preset', url });
             else await navigator.clipboard.writeText(url);
-            status.textContent = 'Link copied — anyone opening it gets this exact setup.';
+            msg.textContent = 'Link copied — anyone opening it gets this exact setup.';
           } catch {
-            status.textContent = url;
+            msg.textContent = url;
           }
         },
-      }, 'Copy share link'),
-    ),
-    h('h3', {}, 'Save'),
-    h('div', { class: 'row' }, nameInput,
-      h('button', {
-        onclick: () => {
-          const name = nameInput.value.trim() || `Setup ${new Date().toLocaleString('en-GB')}`;
-          saveLocalPreset(name, snapshot(state, SOURCES));
-          renderPresets(`Saved “${name}” in this browser.`);
-        },
-      }, 'Save')),
-    mine.length ? h('div', { class: 'presets' }, mine.map(([name, p]) =>
-      h('div', { class: 'preset' },
-        h('button', { class: 'preset-load', onclick: () => load(p.snap) }, name),
-        h('small', {}, new Date(p.saved).toLocaleString('en-GB')),
-        h('button', { class: 'x', title: 'delete', onclick: () => { deleteLocalPreset(name); renderPresets(); } }, '✕')))) : h('p', { class: 'hint' }, 'Nothing saved yet.'),
-    h('h3', {}, 'Built in'),
-    h('div', { class: 'presets' }, BUILTIN.map((p) =>
-      h('div', { class: 'preset' },
-        h('button', { class: 'preset-load', onclick: () => load(p.snap) }, p.name),
-        h('small', {}, p.desc)))),
+      }, 'Copy share link')),
+      h('div', { class: 'row' }, name, h('button', { class: 'save', onclick: () => {
+        const n = name.value.trim() || `Setup ${new Date().toLocaleString('en-GB')}`;
+        saveLocalPreset(n, snapshot(state, SOURCES));
+        openSettings('presets', `Saved “${n}” in this browser.`);
+      } }, 'Save')),
+      ...mine.map(([n, p]) => h('div', { class: 'preset' },
+        h('button', { class: 'preset-load', onclick: () => load(p.snap) }, n),
+        h('button', { class: 'x', 'aria-label': `Delete ${n}`, onclick: () => { deleteLocalPreset(n); openSettings('presets'); } }, '✕'))),
+      ...BUILTIN.map((p) => h('div', { class: 'preset' }, h('button', { class: 'preset-load', onclick: () => load(p.snap) }, p.name), h('small', {}, p.desc)))),
+    section('midi', 'MIDI out',
+      h('p', { class: 'hint' }, 'Play your own synths or a DAW (Chrome/Edge). Each source gets a channel, drums go to 10.'),
+      midi.supported
+        ? midi.access
+          ? row('Output', select([['', '— none —'], ...midi.outputs().map((o) => [o.id, o.name])], g.midiOut, (v) => { g.midiOut = v; save(); }))
+          : h('button', { onclick: () => midi.enable().then(() => openSettings('midi')).catch((e) => (msg.textContent = 'MIDI unavailable: ' + e.message)) }, 'Enable MIDI')
+        : h('p', {}, 'This browser has no Web MIDI.'),
+      row('Built-in sound', h('input', { type: 'checkbox', checked: g.internal, onchange: (e) => set('internal')(e.target.checked) }))),
+    section('about', 'About',
+      h('p', {}, 'datamusak turns live open data into music: every data point becomes a note. The same data always makes the same sound — each station, ship or author has its own instrument and its own place in the scale, and its values walk the melody.'),
+      h('p', {}, 'Everything runs in your browser, straight from public APIs, MQTT brokers, Nostr relays and peer-to-peer rooms. “Online” joins a peer-to-peer room to count listeners and share notes; peers can see each other’s IP address.'),
+      h('p', {}, h('a', { href: 'https://github.com/sloev/datamusak', target: '_blank', rel: 'noopener' }, 'Source code'), ' · ', h('a', { href: 'https://github.com/sloev/datamusak/issues/new?template=new-data-source.yml', target: '_blank', rel: 'noopener' }, 'Suggest a data source')),
+      h('button', { onclick: () => { if (confirm('Reset everything?')) { clearState(); location.reload(); } } }, 'Reset everything')),
   );
 }
-document.querySelectorAll('.tabs button').forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
-$('#reset').onclick = () => {
-  if (!confirm('Reset all instruments, mappings and global settings?')) return;
-  clearState();
-  location.reload();
+$('#open-settings').onclick = () => openSettings();
+midi.onChange = () => sheet.open && openSettings('midi');
+
+// ---------------------------------------------------------------- online
+
+function renderOnline() {
+  const b = $('#online');
+  b.classList.toggle('on', presence.connected);
+  b.textContent = presence.connected ? `● ${presence.peers + 1} online` : '○ offline';
+}
+presence.on(renderOnline);
+$('#online').onclick = async () => {
+  state.global.online = !presence.connected;
+  save();
+  if (state.global.online) await presence.join();
+  else presence.leave();
+  renderOnline();
 };
+if (state.global.online) setTimeout(() => presence.join().then(renderOnline).catch(renderOnline), 1500);
 
-renderGlobals();
-renderSources();
-if (linkedNotice) showTab('presets');
+// ------------------------------------------------------------------ boot
 
-// Installable, offline-capable app shell.
+for (const src of SOURCES) soundMap.setEnabled(src.id, state.sources[src.id].enabled);
+renderFilters();
+renderTiles();
+if (notice) openSettings('presets');
+
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 }
-
 // Handy for debugging in the console (and used by the end-to-end tests).
-window.datamusak = { state, engine, audio, midi, map: soundMap.map, sources: SOURCES };
+window.datamusak = { state, engine, audio, midi, map: soundMap.map, sources: SOURCES, programName, noteName };

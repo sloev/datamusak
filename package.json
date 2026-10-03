@@ -8,7 +8,8 @@
     "test:unit": "node --test \"tests/unit/*.test.js\"",
     "test:e2e": "playwright test",
     "vendor": "node scripts/vendor.mjs",
-    "logo": "node scripts/make-logo.mjs"
+    "logo": "node scripts/make-logo.mjs",
+    "map": "node scripts/make-map.mjs"
   },
   "devDependencies": {
     "@fontsource/titan-one": "5.3.0",
@@ -16,8 +17,10 @@
     "esbuild": "0.28.2",
     "leaflet": "1.9.4",
     "mqtt": "5.16.0",
+    "topojson-client": "3.1.0",
     "trystero": "0.25.4",
     "webaudiofont": "3.0.4",
-    "webtorrent": "3.0.21"
+    "webtorrent": "3.0.21",
+    "world-atlas": "2.0.2"
   }
 }

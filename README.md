@@ -8,20 +8,24 @@ datamusak listens to public live data: the Danish power grid, DMI weather and li
 
 It's a static site with no server and no build step. It is also an installable PWA.
 
+## How data becomes music
+
+Mapping is **deterministic**: the same data always makes the same sound. Nothing is random, and nothing "learns" ranges.
+
+- **Identity → instrument and register.** Every event carries an identity: a weather station, ship, aircraft, author, topic, cable and so on. The identity picks the instrument from the source's instrument families, plus its own transposition, so ten stations sound like ten different players.
+- **Value → melody.** The melody field walks the chosen scale in fine steps (by default the field's physical range in 36 steps). At the edge of the register it bounces back instead of jumping, so small changes like 12.1 → 12.9 °C still move the tune.
+- **Other fields → fixed ranges.** Loudness, note length (snapped to musical lengths), left/right and brightness come from fixed physical ranges.
+- **Instruments:** each source plays from instrument families: the 16 General MIDI families (Piano, Mallets, Organ, Guitar, Bass, Strings, Ensemble, Brass, Reed, Pipe, Synth lead/pad/FX, Ethnic, Percussive, Sound FX) plus a drum kit, or **ALL 128**. Sounds load on demand and are cached. A mixer sets the level of each family across all sources.
+
 ## Features
 
-- **27 live sources** (see below), each with its own **mapping** from data fields to musical parameters. Ranges are either fixed physical ranges or learned automatically from recent data.
-- **22 scales and modes**, set globally or per source, plus optional harmony (third, fifth, triad, octave…).
-- **Instrument slots** (General MIDI programs or a drum kit) with level, pan, octave and mute. Each source routes to all slots or a chosen subset, picking one per note by taking turns, at random, or by a data field.
-- **Global settings**: BPM, quantize grid, key, scale, tone, reverb, tempo-synced delay, polyphony limit, built-in synth on/off.
-- **Web MIDI out**: slot *n* sends on channel *n*, drums on channel 10, brightness as CC74.
-- **Presets**: save setups in your browser, start from built-in ones, or **share a link** that holds the whole setup (`#p=…`, compressed).
-- **Online**: a peer-to-peer room shows how many people are listening and passes notes between you. The "Other datamusak listeners" source plays them.
-- **Settings are saved in your browser** (localStorage) automatically.
-- **Installable PWA**, fast and well cached:
-  - The app shell is precached.
-  - Heavy libraries (MQTT, WebTorrent, Trystero, the sound engine) are self-hosted and only loaded when something needs them.
-  - Instrument samples are cached the first time they play.
+- **27 live sources**, each a tile. Tap to switch it on; tap ⋯ to choose its instrument families, range (low/mid/high/wide), volume, how busy it may be, and (folded away) which data field drives what.
+- **Settings** (⚙): key, 22 scales, tempo, grid, reverb/echo/brightness, the instrument mixer, presets, MIDI out.
+- **Presets**: save in the browser, start from built-ins, or **share a link** with the whole setup (`#p=…`).
+- **Online**: a peer-to-peer room counts listeners and passes notes between you.
+- **Web MIDI out**: each source on its own channel, with program changes; drums on channel 10.
+- **Map**: our own vector coastlines from Natural Earth (Denmark at 1:10m), with no tile server and no API key.
+- **Installable PWA**, fast and well cached. The app shell is precached; heavy libraries and instrument samples load only when needed.
 
 ## Data sources
 
@@ -78,17 +82,21 @@ const harbour = {
   transport: 'REST · example.org',
   link: 'https://example.org/docs',
   info: 'One or two sentences on what you hear.',
-  fields: {                               // numbers that can drive music
-    temp: { label: 'Water °C', min: 0, max: 24 },   // fixed range…
-    flow: { label: 'Flow', log: true },              // …or learned automatically (log for heavy tails)
+  fields: {                               // numbers that can drive music — give physical ranges
+    temp: { label: 'Water °C', min: 0, max: 24, step: 0.5 },  // step: one scale step per 0.5 °C
+    flow: { label: 'Flow m³/s', min: 0, max: 400, log: true },
   },
   options: { /* optional user settings: { label, type: 'select' | 'text', choices, default } */ },
-  defaults: { pitch: 'temp', velocity: 'flow', slots: [1], rate: 4 },
+  defaults: {
+    pitch: 'temp', velocity: 'flow', duration: 'flow',     // which field drives melody/loudness/length/…
+    families: ['pipe', 'chromatic'], register: 'mid', rate: 4,
+  },
   start(ctx) {
     const seq = ctx.sequence(0.5);        // slow data → a looping phrase (beats per step)
     ctx.poll(60_000, async () => {
       const d = await ctx.fetchJSON('https://example.org/api/latest');
-      seq.set(d.stations.map((s) => ({ lat: s.lat, lon: s.lon, label: s.name, values: { temp: s.t, flow: s.q } })));
+      // `key` is the identity: it picks the instrument and transposition, so give every station its own
+      seq.set(d.stations.map((s) => ({ key: s.id, lat: s.lat, lon: s.lon, label: s.name, values: { temp: s.t, flow: s.q } })));
       return `${d.stations.length} stations`;  // shown as the status line
     });
   },
@@ -104,7 +112,7 @@ The `ctx` helpers:
 
 Everything registered through `ctx` is cleaned up when the source stops.
 
-3. Add a parser test in `tests/unit/sources.test.js` using the fake `ctx` and a real sample payload. The definition checks (fields, defaults, options) run automatically.
+3. Add a parser test in `tests/unit/sources.test.js` using the fake `ctx` and a real sample payload. The definition checks (fields, defaults, options) and the musical diversity check (`tests/unit/engine.test.js`) run automatically.
 4. Run `npm test` and open a PR.
 
 ## Development
@@ -117,6 +125,7 @@ npx playwright install chromium
 npm run test:e2e       # Playwright, fully offline: samples and APIs are mocked
 npm run vendor         # refresh vendor/ after bumping a library
 npm run logo           # re-render assets/logo.png and the app icons from the logo shader
+npm run map            # rebuild assets/map/coast.json from Natural Earth (world-atlas)
 ```
 
 CI (`.github/workflows/ci.yml`) runs all tests on every push and pull request. When they pass on `master`, it deploys to GitHub Pages and stamps a fresh service-worker cache version.
@@ -127,16 +136,17 @@ CI (`.github/workflows/ci.yml`) runs all tests on every push and pull request. W
 index.html            page shell
 sw.js                 service worker (network-first shell, cache-first vendor libs + samples)
 manifest.webmanifest
-assets/               logo.png + app icons (rendered by the logo shader)
+assets/               logo.png + app icons (rendered by the logo shader), map/coast.json (vector coastlines)
 vendor/               self-hosted Leaflet, mqtt.js, WebTorrent, Trystero, WebAudioFont player, Titan One
 js/main.js            UI wiring
 js/logo.js            the WebGL logo (3D bubble letters, plasma, checkerboards, copper bars, glitch)
-js/engine.js          data event → normalized fields → notes (rate limit, quantize, routing)
-js/normalize.js       fixed and auto-learned ranges
+js/engine.js          data event → deterministic voice (instrument, note, loudness, length, pan) → audio + MIDI
+js/mapping.js         the deterministic mapping maths (identity hash, scale walk with fold, ranges)
+js/instruments.js     General MIDI families + drum kit
 js/scales.js          scales and quantization
-js/audio.js           WebAudioFont instruments, slot buses, reverb/delay/tone/master
+js/audio.js           WebAudioFont instruments loaded on demand, family buses, reverb/echo/tone/master
 js/midi.js            Web MIDI output
-js/map.js             OpenStreetMap (free tiles, no key), source homes, event pulses
+js/map.js             vector coastline map (no tiles, no key), source homes, event pulses
 js/viz.js             piano roll and raw log
 js/presets.js         snapshots, built-in presets, share links
 js/presence.js        peer-to-peer "online" room

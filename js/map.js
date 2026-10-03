@@ -1,5 +1,5 @@
-// OpenStreetMap (free, no key), darkened to stay calm behind the colour: source homes are
-// outlined stickers, and every data event pops a pulse where it happened.
+// A vector map with no tile server and no key: Natural Earth coastlines (Denmark at 1:10m) drawn
+// as neon lines on pure black, plus outlined source homes and a pulse wherever data happens.
 const VIEWS = {
   dk: { center: [56.1, 10.6], zoom: 7 },
   nordic: { center: [58.5, 16], zoom: 5 },
@@ -8,13 +8,17 @@ const VIEWS = {
 
 export class SoundMap {
   constructor(el, sources, { onSelect }) {
-    this.map = L.map(el, { zoomControl: true, worldCopyJump: true, preferCanvas: true });
+    this.map = L.map(el, { zoomControl: false, worldCopyJump: true, preferCanvas: true });
+    L.control.zoom({ position: 'bottomleft' }).addTo(this.map);
     this.view('dk');
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19,
-    }).addTo(this.map);
+    this.map.attributionControl.addAttribution('Coastlines: <a href="https://www.naturalearthdata.com/">Natural Earth</a>');
+    // coastlines get their own canvas, so the animated pulses never force them to redraw
+    const coastPane = this.map.createPane('coast');
+    coastPane.style.zIndex = 350;
+    coastPane.style.pointerEvents = 'none';
+    this.coastRenderer = L.canvas({ padding: 0.5, pane: 'coast' });
     this.renderer = L.canvas({ padding: 0.3 });
+    this.drawCoast();
     this.homes = {};
     this.pulses = [];
     for (const src of sources) {
@@ -31,6 +35,20 @@ export class SoundMap {
     requestAnimationFrame(this.animate);
   }
 
+  async drawCoast() {
+    try {
+      const { lines, borders } = await (await fetch(new URL('../assets/map/coast.json', import.meta.url))).json();
+      const toLatLngs = (flat) => {
+        const out = [];
+        for (let i = 0; i < flat.length; i += 2) out.push([flat[i + 1], flat[i]]);
+        return out;
+      };
+      const coast = L.layerGroup().addTo(this.map);
+      for (const l of borders) L.polyline(toLatLngs(l), { color: '#ffe61a', weight: 1, dashArray: '2 5', interactive: false, renderer: this.coastRenderer }).addTo(coast);
+      for (const l of lines) L.polyline(toLatLngs(l), { color: '#1af2ff', weight: 1.6, interactive: false, renderer: this.coastRenderer }).addTo(coast);
+    } catch {}
+  }
+
   view(name) {
     const v = VIEWS[name];
     this.map.setView(v.center, v.zoom);
@@ -40,18 +58,20 @@ export class SoundMap {
     this.homes[id]?.setStyle({ fillOpacity: enabled ? 1 : 0.25, opacity: enabled ? 1 : 0.4, radius: enabled ? 9 : 6 });
   }
 
+  // Played notes: a full-saturation ring that pops out in a few hard steps, then vanishes.
+  // Events that didn't play: a small dot that blinks once. No fades — no muddy midtones.
   pulse(src, ev, notes) {
     const pos = ev.lat != null ? [ev.lat, ev.lon] : src.home;
     const played = notes.length > 0;
-    const vel = played ? notes[0].velocity / 127 : 0.2;
-    const r = 3 + vel * 13;
+    const vel = played ? notes[0].velocity / 127 : 0;
+    const r = played ? 5 + vel * 12 : 2.5;
     const c = L.circleMarker(pos, {
-      radius: r, color: '#050505', weight: played ? 2.5 : 1, fillColor: src.color,
-      fillOpacity: played ? 0.95 : 0.35, opacity: played ? 1 : 0.35, renderer: this.renderer, interactive: false,
-    }).addTo(this.map);
+      radius: r, color: played ? src.color : '#050505', weight: played ? 3 : 1, fill: !played || vel > 0.8,
+      fillColor: src.color, fillOpacity: 1, opacity: 1, renderer: this.renderer, interactive: false,
+    });
     const delay = played ? notes[0].delayMs : 0;
-    this.pulses.push({ c, born: performance.now() + delay, life: played ? 1400 + notes[0].duration * 500 : 800, r, played });
-    if (this.pulses.length > 350) this.pulses.shift().c.remove();
+    this.pulses.push({ c, born: performance.now() + delay, life: played ? 600 : 300, r, played, shown: false });
+    if (this.pulses.length > 300) this.pulses.shift().c.remove();
   }
 
   animate() {
@@ -62,11 +82,17 @@ export class SoundMap {
         p.c.remove();
         return false;
       }
-      if (age > 0) {
-        // pop in fast, then sag out
-        const grow = p.played ? 1 + Math.sin(Math.min(1, age * 4) * Math.PI * 0.5) * 0.8 + age : 1 + age * 0.4;
-        p.c.setRadius(p.r * grow);
-        p.c.setStyle({ opacity: (1 - age) * (p.played ? 1 : 0.35), fillOpacity: (1 - age) * (p.played ? 0.95 : 0.3) });
+      if (age >= 0) {
+        if (!p.shown) {
+          p.c.addTo(this.map);
+          p.shown = true;
+        }
+        // 4 hard steps (≈ demo cadence) instead of a smooth ease
+        const step = Math.floor(age * 4) / 4;
+        if (p.played && step !== p.step) {
+          p.step = step;
+          p.c.setRadius(p.r * (1 + step * 1.6));
+        }
       }
       return true;
     });
