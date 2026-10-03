@@ -14,10 +14,8 @@ test('source definitions are complete and consistent', () => {
     assert.equal(typeof s.start, 'function');
     const m = defaultMapping(s);
     for (const p of Object.keys(PARAMS)) {
-      assert.ok(m[p].field === 'none' || s.allFields[m[p].field], `${s.id}: ${p} → unknown field ${m[p].field}`);
+      assert.ok(m.map[p] === 'none' || s.allFields[m.map[p]], `${s.id}: ${p} → unknown field ${m.map[p]}`);
     }
-    if (m.slotMode === 'field') assert.ok(s.allFields[m.slotField], `${s.id}: slotField`);
-    assert.ok(m.slots === 'all' || m.slots.every((i) => i >= 0 && i < 8), s.id);
     for (const [k, f] of Object.entries(s.allFields)) {
       assert.ok(f.label, `${s.id}.${k} label`);
       if (f.min !== undefined) assert.ok(f.max > f.min, `${s.id}.${k} range`);

@@ -38,7 +38,7 @@ const swarm = {
     peers: { label: 'Connected peers', min: 0, max: 20 },
     newPeer: { label: 'New peer joined', min: 0, max: 1 },
   },
-  defaults: { pitch: 'position', velocity: 'speed', duration: 'peers', bright: 'progress', slots: [1, 2], slotMode: 'field', slotField: 'newPeer', rate: 8, pitchRange: [48, 96], durationRange: [0.05, 0.4] },
+  defaults: { pitch: 'position', velocity: 'speed', duration: 'peers', bright: 'progress', families: ['lead', 'pad', 'chromatic'], register: 'wide', rate: 8 },
   async start(ctx) {
     ctx.status('connecting', 'loading WebTorrent…');
     const WebTorrent = await ctx.lib('webtorrent');
@@ -61,9 +61,10 @@ const swarm = {
     });
     // Every block received from any peer (or the HTTP web seed) is a data point.
     t.on('wire', (wire) => {
-      ctx.emit({ label: `peer joined (${wire.type || 'peer'})`, values: values(Math.floor(Math.random() * (t.pieces?.length || 1)), 1) });
+      const key = wire.type === 'webSeed' ? 'webseed' : String(wire.peerId || wire.remoteAddress || 'peer');
+      ctx.emit({ key, label: `peer joined (${wire.type || 'peer'})`, values: values(0, 1) });
       wire.on('piece', (index, offset, buffer) => {
-        ctx.emit({ label: `piece ${index} +${((buffer?.length || 0) / 1024).toFixed(0)} KB`, values: values(index, 0) });
+        ctx.emit({ key, label: `piece ${index} +${((buffer?.length || 0) / 1024).toFixed(0)} KB`, values: values(index, 0) });
         if (t.downloaded >= cap) {
           ctx.status('ok', `cap of ${ctx.options.cap} MB reached — stopped`);
           client.destroy();

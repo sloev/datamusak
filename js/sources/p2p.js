@@ -19,18 +19,18 @@ const listeners = {
     arrival: { label: 'Arrival (+1) / departure (−1)', min: -1, max: 1 },
     source: { label: 'Their source (stable per source)', min: 0, max: 999 },
   },
-  defaults: { pitch: 'note', velocity: 'velocity', duration: 'length', bright: 'peers', slots: [2, 5], slotMode: 'field', slotField: 'source', rate: 6, pitchRange: [36, 96], durationRange: [0.08, 1.5] },
+  defaults: { pitch: 'note', velocity: 'velocity', duration: 'length', bright: 'peers', families: 'all', register: 'wide', rate: 6 },
   enabledByDefault: true,
   start(ctx) {
     const off = presence.on((e) => {
       if (e.type === 'count') ctx.status('ok', `${e.peers} other listener${e.peers === 1 ? '' : 's'}`);
       if (e.type === 'join' || e.type === 'leave') {
         ctx.status('ok', `${e.peers} other listener${e.peers === 1 ? '' : 's'}`);
-        ctx.emit({ label: e.type === 'join' ? '👋 someone joined' : '👋 someone left', values: { peers: e.peers, arrival: e.type === 'join' ? 1 : -1, note: e.type === 'join' ? 84 : 48, velocity: 90 } });
+        ctx.emit({ key: e.type, label: e.type === 'join' ? '👋 someone joined' : '👋 someone left', values: { peers: e.peers, arrival: e.type === 'join' ? 1 : -1, note: e.type === 'join' ? 84 : 48, velocity: 90 } });
       }
       if (e.type === 'note') {
         const n = e.note;
-        ctx.emit({ label: `peer note ${n.n}`, values: { note: n.n, velocity: n.v, length: n.d, peers: e.peers, arrival: 0, source: hash(String(n.s || '')) } });
+        ctx.emit({ key: String(n.s || ''), label: `peer note ${n.n}`, values: { note: n.n, velocity: n.v, length: n.d, peers: e.peers, arrival: 0, source: hash(String(n.s || '')) } });
       }
     });
     ctx.onStop(off);
@@ -61,7 +61,7 @@ const gifshooter = {
     hue: { label: 'Painter colour', min: 0, max: 360 },
     painters: { label: 'Painters seen', min: 0, max: 8 },
   },
-  defaults: { pitch: 'y', velocity: 'speed', duration: 'speed', invert: ['duration'], pan: 'x', bright: 'hue', slots: [1, 5, 2], slotMode: 'field', slotField: 'gif', rate: 10, pitchRange: [48, 88], durationRange: [0.06, 0.5] },
+  defaults: { pitch: 'y', velocity: 'speed', duration: 'speed', pan: 'x', bright: 'hue', families: ['ethnic', 'chromatic', 'pipe'], register: 'wide', rate: 10 },
   async start(ctx) {
     ctx.status('connecting', 'joining canvas…');
     const { joinRoom } = await ctx.lib('trystero');
@@ -90,6 +90,7 @@ const gifshooter = {
       ctx.emit({
         lat: 57.75 - m.y * 3.3,
         lon: 8.1 + m.x * 7.0,
+        key: `${peerId}|${m.s ?? ''}`,
         label: `🖌 painter ${String(peerId).slice(0, 4)} ${m.s ?? ''}`,
         values: { x: m.x, y: 1 - m.y, speed, gif: hash(String(m.s ?? '')), hue: Number.isFinite(m.h) ? m.h : undefined, painters: last.size },
       });

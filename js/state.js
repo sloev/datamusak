@@ -1,26 +1,16 @@
-// App state (global params, instrument slots, per-source mappings) with localStorage persistence.
-import { DRUMS } from './audio.js';
+// App state with localStorage persistence: global settings, per-family levels, per-source setup.
+import { FAMILIES } from './instruments.js';
 
-const KEY = 'datamusak:v1';
+const KEY = 'datamusak:v2';
 
+// What a data field can drive, in plain words.
 export const PARAMS = {
-  pitch: { label: 'Pitch', unit: 'note', min: 0, max: 127, step: 1 },
-  velocity: { label: 'Velocity', unit: '', min: 1, max: 127, step: 1 },
-  duration: { label: 'Length', unit: 's', min: 0.03, max: 8, step: 0.01 },
-  pan: { label: 'Pan', unit: '', min: -1, max: 1, step: 0.05 },
-  bright: { label: 'Brightness (CC74)', unit: '', min: 0, max: 1, step: 0.05 },
+  pitch: 'Melody',
+  velocity: 'Loudness',
+  duration: 'Note length',
+  pan: 'Left ↔ right',
+  bright: 'Brightness',
 };
-
-export const DEFAULT_SLOTS = [
-  { name: 'Keys', program: 4, level: 0.7, pan: 0, octave: 0, mute: false }, // Electric piano 1
-  { name: 'Mallets', program: 12, level: 0.75, pan: -0.3, octave: 0, mute: false }, // Marimba
-  { name: 'Bells', program: 11, level: 0.6, pan: 0.3, octave: 1, mute: false }, // Vibraphone
-  { name: 'Pad', program: 89, level: 0.45, pan: 0, octave: -1, mute: false }, // Pad 2 (warm)
-  { name: 'Pluck', program: 45, level: 0.6, pan: 0.2, octave: 0, mute: false }, // Pizzicato strings
-  { name: 'Kalimba', program: 108, level: 0.6, pan: -0.2, octave: 0, mute: false },
-  { name: 'Bass', program: 35, level: 0.7, pan: 0, octave: -1, mute: false }, // Fretless bass
-  { name: 'Drums', program: DRUMS, level: 0.6, pan: 0, octave: 0, mute: false },
-];
 
 export const DEFAULT_GLOBAL = {
   bpm: 92,
@@ -33,52 +23,45 @@ export const DEFAULT_GLOBAL = {
   delayMix: 0.15,
   delayFeedback: 0.35,
   delayBeats: 0.75,
-  maxPolyphony: 32,
   online: true,
   midiOut: '',
   internal: true,
+  families: Object.fromEntries(FAMILIES.map((f) => [f.id, { level: f.id === 'drums' ? 0.8 : 0.9, mute: false }])),
 };
 
 export function defaultMapping(src) {
   const d = src.defaults || {};
-  const inv = d.invert || [];
-  const m = (field, lo, hi, name) => ({ field: field ?? 'none', lo, hi, invert: inv.includes(name) });
   return {
     enabled: !!src.enabledByDefault,
-    level: 1,
+    volume: 1,
     rate: d.rate ?? 4,
-    chance: 1,
-    scale: 'global',
-    harmony: 'none',
-    slots: d.slots ?? [0, 1, 2],
-    slotMode: d.slotMode ?? 'cycle',
-    slotField: d.slotField ?? 'random',
-    pitch: m(d.pitch, ...(d.pitchRange ?? [45, 81]), 'pitch'),
-    velocity: m(d.velocity, ...(d.velocityRange ?? [40, 105]), 'velocity'),
-    duration: m(d.duration, ...(d.durationRange ?? [0.2, 1.6]), 'duration'),
-    pan: m(d.pan ?? (src.geo === 'virtual' ? 'random' : 'lon'), -0.8, 0.8, 'pan'),
-    bright: m(d.bright, 0.35, 0.95, 'bright'),
+    register: d.register ?? 'mid',
+    families: d.families ?? ['piano', 'chromatic'],
+    map: {
+      pitch: d.pitch ?? 'none',
+      velocity: d.velocity ?? 'none',
+      duration: d.duration ?? 'none',
+      pan: d.pan ?? (src.geo === 'virtual' ? 'none' : 'lon'),
+      bright: d.bright ?? 'none',
+    },
     options: Object.fromEntries(Object.entries(src.options || {}).map(([k, o]) => [k, o.default])),
   };
 }
+
+const clone = (x) => JSON.parse(JSON.stringify(x));
 
 export function loadState(sources) {
   let saved = {};
   try {
     saved = JSON.parse(localStorage.getItem(KEY) || '{}');
   } catch {}
-  const state = {
-    global: { ...DEFAULT_GLOBAL, ...(saved.global || {}) },
-    slots: (saved.slots && saved.slots.length ? saved.slots : DEFAULT_SLOTS).map((s) => ({ ...s })),
-    sources: {},
-  };
+  const global = { ...clone(DEFAULT_GLOBAL), ...(saved.global || {}) };
+  global.families = { ...clone(DEFAULT_GLOBAL.families), ...(saved.global?.families || {}) };
+  const state = { global, sources: {} };
   for (const src of sources) {
     const def = defaultMapping(src);
     const s = (saved.sources || {})[src.id] || {};
-    const merged = { ...def, ...s };
-    for (const p of Object.keys(PARAMS)) merged[p] = { ...def[p], ...(s[p] || {}) };
-    merged.options = { ...def.options, ...(s.options || {}) };
-    state.sources[src.id] = merged;
+    state.sources[src.id] = { ...def, ...s, map: { ...def.map, ...(s.map || {}) }, options: { ...def.options, ...(s.options || {}) } };
   }
   return state;
 }

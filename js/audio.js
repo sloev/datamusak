@@ -1,20 +1,20 @@
-// Sound engine: General MIDI instruments via WebAudioFont (loaded on demand),
-// one bus per instrument slot, plus global tone / delay / reverb / master.
+// Sound engine: any of the 128 General MIDI programs + a drum kit via WebAudioFont, loaded on
+// demand (and cached by the service worker), one bus per instrument family, then tone / delay /
+// reverb / master.
 import { DRUM_NOTES } from './scales.js';
-import { GM } from './gm.js';
+import { FAMILIES, DRUMS } from './instruments.js';
 import { LIBS } from './lazy.js';
 
-export const DRUMS = 'drums';
+export { DRUMS };
 
 export class AudioEngine {
   constructor(state) {
     this.state = state;
     this.ctx = null;
     this.player = null; // WebAudioFont is loaded on first start
-    this.slotBus = [];
-    this.presets = []; // per slot: preset object, or {drums: {note: preset}}
-    this.loading = [];
-    this.onSlotStatus = () => {};
+    this.bus = {}; // family id → GainNode
+    this.presets = new Map(); // program → preset | { drums: { note: preset } }
+    this.loading = new Map(); // program → [pending voices]
   }
 
   get running() {
@@ -38,14 +38,14 @@ export class AudioEngine {
 
   build() {
     const ctx = this.ctx;
-    this.bus = ctx.createGain();
+    this.mix = ctx.createGain();
     this.tone = ctx.createBiquadFilter();
     this.tone.type = 'lowpass';
     this.limiter = ctx.createDynamicsCompressor();
     this.limiter.threshold.value = -10;
     this.limiter.ratio.value = 12;
     this.master = ctx.createGain();
-    this.bus.connect(this.tone);
+    this.mix.connect(this.tone);
     this.tone.connect(this.limiter);
     this.limiter.connect(this.master);
     this.master.connect(ctx.destination);
@@ -58,29 +58,22 @@ export class AudioEngine {
     this.delaySend = ctx.createGain();
     this.delay = ctx.createDelay(4);
     this.feedback = ctx.createGain();
-    this.delayFilter = ctx.createBiquadFilter();
-    this.delayFilter.type = 'lowpass';
-    this.delayFilter.frequency.value = 3500;
+    const damp = ctx.createBiquadFilter();
+    damp.type = 'lowpass';
+    damp.frequency.value = 3500;
     this.tone.connect(this.delaySend);
     this.delaySend.connect(this.delay);
-    this.delay.connect(this.delayFilter);
-    this.delayFilter.connect(this.feedback);
+    this.delay.connect(damp);
+    damp.connect(this.feedback);
     this.feedback.connect(this.delay);
-    this.delayFilter.connect(this.limiter);
+    damp.connect(this.limiter);
 
-    this.state.slots.forEach((_, i) => this.ensureSlot(i));
+    for (const f of FAMILIES) {
+      const g = ctx.createGain();
+      g.connect(this.mix);
+      this.bus[f.id] = g;
+    }
     this.applyGlobals();
-  }
-
-  ensureSlot(i) {
-    if (!this.player || this.slotBus[i]) return;
-    const g = this.ctx.createGain();
-    const p = this.ctx.createStereoPanner();
-    g.connect(p);
-    p.connect(this.bus);
-    this.slotBus[i] = { gain: g, pan: p };
-    this.applySlot(i);
-    this.loadSlot(i);
   }
 
   applyGlobals() {
@@ -93,70 +86,73 @@ export class AudioEngine {
     this.delaySend.gain.setTargetAtTime(g.delayMix, t, 0.05);
     this.feedback.gain.setTargetAtTime(g.delayFeedback, t, 0.05);
     this.delay.delayTime.setTargetAtTime(Math.min(3.9, (60 / g.bpm) * g.delayBeats), t, 0.05);
-  }
-
-  applySlot(i) {
-    const s = this.state.slots[i];
-    const b = this.slotBus[i];
-    if (!b || !s) return;
-    const t = this.ctx.currentTime;
-    b.gain.gain.setTargetAtTime(s.mute ? 0 : s.level, t, 0.03);
-    b.pan.pan.setTargetAtTime(s.pan, t, 0.03);
-  }
-
-  // Resolve and lazily load the WebAudioFont preset(s) for a slot's program.
-  loadSlot(i) {
-    if (!this.player) return;
-    const program = this.state.slots[i].program;
-    const loader = this.player.loader;
-    const token = (this.loading[i] = {});
-    let vars;
-    if (program === DRUMS) {
-      vars = DRUM_NOTES.map((n) => [n, loader.drumInfo(loader.findDrum(n))]);
-    } else {
-      vars = [[null, loader.instrumentInfo(loader.findInstrument(program))]];
+    for (const f of FAMILIES) {
+      const s = g.families[f.id];
+      this.bus[f.id].gain.setTargetAtTime(s.mute ? 0 : s.level, t, 0.03);
     }
-    this.onSlotStatus(i, 'loading');
-    for (const [, info] of vars) loader.startLoad(this.ctx, info.url, info.variable);
-    loader.waitLoad(() => {
-      if (this.loading[i] !== token) return;
-      if (program === DRUMS) {
-        const drums = {};
-        for (const [n, info] of vars) drums[n] = window[info.variable];
-        this.presets[i] = { drums };
-      } else {
-        this.presets[i] = window[vars[0][1].variable];
-      }
-      this.onSlotStatus(i, 'ready');
-    });
   }
 
-  play({ slot, note, velocity, duration, pan, bright, when }) {
+  // Fetch the sample set(s) for a program; resolves when every zone is decoded.
+  load(program) {
+    if (this.presets.has(program) || this.loading.has(program) || !this.player) return;
+    this.loading.set(program, []);
+    const loader = this.player.loader;
+    const infos =
+      program === DRUMS
+        ? DRUM_NOTES.map((n) => [n, loader.drumInfo(loader.findDrum(n))])
+        : [[null, loader.instrumentInfo(loader.findInstrument(program))]];
+    for (const [, info] of infos) loader.startLoad(this.ctx, info.url, info.variable);
+    const started = performance.now();
+    const check = () => {
+      if (!infos.every(([, info]) => loader.loaded(info.variable))) {
+        if (performance.now() - started < 30000) setTimeout(check, 120);
+        else this.loading.delete(program); // give up quietly; a later note retries
+        return;
+      }
+      const preset = program === DRUMS ? { drums: Object.fromEntries(infos.map(([n, info]) => [n, window[info.variable]])) } : window[infos[0][1].variable];
+      this.presets.set(program, preset);
+      // notes that arrived while loading still play if they're fresh
+      const pending = this.loading.get(program) || [];
+      this.loading.delete(program);
+      const now = this.ctx.currentTime;
+      for (const v of pending) if (now - v.when < 0.6) this.play({ ...v, when: now + 0.01 });
+    };
+    check();
+  }
+
+  play(v) {
     if (!this.running) return;
-    const preset = this.presets[slot];
-    const bus = this.slotBus[slot];
-    if (!preset || !bus) return;
-    const p = preset.drums ? preset.drums[note] : preset;
+    const preset = this.presets.get(v.program);
+    if (!preset) {
+      this.load(v.program);
+      const q = this.loading.get(v.program);
+      if (q && q.length < 8) q.push(v);
+      return;
+    }
+    const p = preset.drums ? preset.drums[v.note] : preset;
     if (!p) return;
     const ctx = this.ctx;
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.value = 300 * Math.pow(2, bright * 6);
+    filter.frequency.value = 300 * Math.pow(2, v.bright * 6);
     filter.Q.value = 0.7;
     const panner = ctx.createStereoPanner();
-    panner.pan.value = Math.max(-1, Math.min(1, pan));
+    panner.pan.value = Math.max(-1, Math.min(1, v.pan));
     filter.connect(panner);
-    panner.connect(bus.gain);
-    const vol = Math.pow(velocity / 127, 1.6) * 0.9;
-    this.player.queueWaveTable(ctx, filter, p, when, note, duration, vol);
-    const ttl = (when - ctx.currentTime + duration + 2) * 1000;
+    panner.connect(this.bus[v.family] || this.mix);
+    this.player.queueWaveTable(ctx, filter, p, v.when, v.note, v.duration, Math.pow(v.velocity / 127, 1.6) * 0.9);
     setTimeout(() => {
       filter.disconnect();
       panner.disconnect();
-    }, ttl);
+    }, (v.when - ctx.currentTime + v.duration + 2) * 1000);
   }
 
-  instrumentNames() {
-    return GM;
+  // A quick audition of one family (used by the mixer).
+  async audition(familyId) {
+    await this.start();
+    const f = FAMILIES.find((x) => x.id === familyId);
+    const program = f.programs[0];
+    const note = program === DRUMS ? 38 : 60;
+    this.play({ program, family: f.id, note, velocity: 100, duration: 0.6, pan: 0, bright: 0.8, when: this.ctx.currentTime + 0.05 });
   }
 }

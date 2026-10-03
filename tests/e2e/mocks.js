@@ -41,9 +41,9 @@ export async function mockNetwork(page, { api = API, fail = [] } = {}) {
 // Enable exactly these sources (and disable the rest) before pressing Start.
 export async function onlySources(page, ids) {
   await page.evaluate((ids) => {
-    for (const card of document.querySelectorAll('.source')) {
-      const cb = card.querySelector('.source-head input[type=checkbox]');
-      if (cb.checked !== ids.includes(card.dataset.id)) cb.click();
+    for (const tile of document.querySelectorAll('.tile')) {
+      const on = tile.classList.contains('on');
+      if (on !== ids.includes(tile.dataset.id)) tile.querySelector('.tile-main').click();
     }
   }, ids);
 }

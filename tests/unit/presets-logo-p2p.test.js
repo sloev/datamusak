@@ -10,16 +10,17 @@ import { fakeCtx } from './fake-ctx.js';
 
 test('a default setup snapshots to (almost) nothing', () => {
   const state = loadState(SOURCES);
-  assert.deepEqual(snapshot(state, SOURCES), { v: 1, g: {}, s: {} });
+  assert.deepEqual(snapshot(state, SOURCES), { v: 2, g: {}, s: {} });
 });
 
 test('snapshot → share link → apply restores the setup', async () => {
   const a = loadState(SOURCES);
   a.global.bpm = 133;
   a.global.scale = 'dorian';
-  a.slots[0].program = 44;
+  a.global.families.bass.level = 0.3;
   a.sources.elpris.enabled = true;
-  a.sources['dmi-weather'].pitch.field = 'wind';
+  a.sources['dmi-weather'].map.pitch = 'wind';
+  a.sources['dmi-weather'].families = 'all';
   a.sources.wikipedia.options.wiki = 'all';
   const code = await encode(snapshot(a, SOURCES));
   assert.match(code, /^[\w-]+$/, 'url-safe');
@@ -33,9 +34,12 @@ test('snapshot → share link → apply restores the setup', async () => {
   assert.equal(b.global.bpm, 133);
   assert.equal(b.global.scale, 'dorian');
   assert.equal(b.global.midiOut, 'my-synth', 'local MIDI port is kept');
-  assert.equal(b.slots[0].program, 44);
+  assert.equal(b.global.families.bass.level, 0.3);
+  assert.equal(b.global.families.pad.level, 0.9, 'other families keep defaults');
   assert.equal(b.sources.elpris.enabled, true);
-  assert.equal(b.sources['dmi-weather'].pitch.field, 'wind');
+  assert.equal(b.sources['dmi-weather'].map.pitch, 'wind');
+  assert.equal(b.sources['dmi-weather'].map.velocity, 'wind', 'untouched mapping keeps its default');
+  assert.equal(b.sources['dmi-weather'].families, 'all');
   assert.equal(b.sources.wikipedia.options.wiki, 'all');
   assert.deepEqual(snapshot(b, SOURCES), snapshot(a, SOURCES));
 });

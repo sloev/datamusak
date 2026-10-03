@@ -41,13 +41,13 @@ const energinetGrid = {
   link: 'https://www.energidataservice.dk/tso-electricity/PowerSystemRightNow',
   info: 'Every production type and interconnector cable of the Danish grid, played as an arpeggio. Each note sits where the power is made or crosses the border; louder = more megawatts.',
   fields: {
-    mw: { label: 'MW (signed: + import / production)' },
-    abs: { label: '|MW|', log: true },
+    mw: { label: 'MW (signed: + import / production)', min: -2500, max: 3500, step: 60 },
+    abs: { label: '|MW|', min: 0, max: 3500, log: true },
     component: { label: 'Component # (fixed per cable/plant)', min: 0, max: GRID.length - 1 },
     co2: { label: 'CO₂ g/kWh', min: 0, max: 300 },
     windShare: { label: 'Wind share of production', min: 0, max: 1 },
   },
-  defaults: { pitch: 'component', velocity: 'abs', duration: 'windShare', bright: 'co2', slots: [1], rate: 8, pitchRange: [50, 86], durationRange: [0.15, 0.9] },
+  defaults: { pitch: 'mw', velocity: 'abs', duration: 'abs', bright: 'co2', families: ['lead', 'bass', 'chromatic'], register: 'wide', rate: 8 },
   enabledByDefault: true,
   start(ctx) {
     const seq = ctx.sequence(0.5);
@@ -61,7 +61,7 @@ const energinetGrid = {
       GRID.forEach(([key, label, lat, lon], component) => {
         const mw = pick(key);
         if (mw === undefined) return;
-        items.push({ lat, lon, label: `${label}: ${Math.round(mw)} MW`, values: { mw, abs: Math.abs(mw), component, co2, windShare: prod ? wind / prod : 0 } });
+        items.push({ lat, lon, key, label: `${label}: ${Math.round(mw)} MW`, values: { mw, abs: Math.abs(mw), component, co2, windShare: prod ? wind / prod : 0 } });
       });
       seq.set(items);
       return `${recs[0]?.Minutes1DK ?? ''} · CO₂ ${co2 ?? '?'} g/kWh`;
@@ -79,13 +79,13 @@ const energinetCo2 = {
   link: 'https://www.energidataservice.dk/tso-electricity/PowerSystemRightNow',
   info: 'The last 60 minutes of the Danish grid as a looping bass line: pitch follows CO₂ intensity, loudness the wind power. The loop shifts by one note every minute.',
   fields: {
-    co2: { label: 'CO₂ g/kWh' },
-    wind: { label: 'Wind MW' },
-    solar: { label: 'Solar MW' },
-    exchange: { label: 'Net exchange MW' },
+    co2: { label: 'CO₂ g/kWh', min: 0, max: 300, step: 4 },
+    wind: { label: 'Wind MW', min: 0, max: 6000 },
+    solar: { label: 'Solar MW', min: 0, max: 3000 },
+    exchange: { label: 'Net exchange MW', min: -4000, max: 4000 },
     minute: { label: 'Minute in loop', min: 0, max: 59 },
   },
-  defaults: { pitch: 'co2', velocity: 'wind', duration: 'solar', bright: 'exchange', pan: 'minute', slots: [6], rate: 4, pitchRange: [40, 64], durationRange: [0.3, 1.2] },
+  defaults: { pitch: 'co2', velocity: 'wind', duration: 'solar', bright: 'exchange', pan: 'minute', families: ['bass', 'organ'], register: 'low', rate: 4 },
   start(ctx) {
     const seq = ctx.sequence(1);
     ctx.poll(60000, async () => {
@@ -119,12 +119,12 @@ const elpris = {
   link: 'https://www.elprisenligenu.dk/elpris-api',
   info: 'Today’s day-ahead prices for West (DK1, Aarhus) and East Denmark (DK2, Copenhagen) as a melody through the day. The current time slot is accented.',
   fields: {
-    price: { label: 'DKK/kWh' },
+    price: { label: 'DKK/kWh', min: -0.5, max: 4, step: 0.03 },
     slot: { label: 'Time of day', min: 0, max: 1 },
     isNow: { label: 'Is current slot', min: 0, max: 1 },
     area: { label: 'Area (0 = DK1, 1 = DK2)', min: 0, max: 1 },
   },
-  defaults: { pitch: 'price', velocity: 'isNow', duration: 'price', pan: 'area', bright: 'slot', slots: [0], rate: 8, pitchRange: [52, 79], velocityRange: [35, 115], durationRange: [0.15, 0.6] },
+  defaults: { pitch: 'price', velocity: 'isNow', duration: 'slot', pan: 'area', bright: 'price', families: ['piano', 'chromatic'], register: 'mid', rate: 8 },
   start(ctx) {
     const seq = ctx.sequence(0.5);
     ctx.poll(30 * 60000, async () => {
@@ -143,6 +143,7 @@ const elpris = {
           items.push({
             lat: area ? 55.68 : 56.16,
             lon: area ? 12.57 : 10.2,
+            key: `DK${area + 1}`,
             label: `DK${area + 1} ${p.time_start.slice(11, 16)} ${p.DKK_per_kWh.toFixed(2)} kr`,
             values: { price: p.DKK_per_kWh, slot: i / dk1.length, isNow: start <= now && now < end ? 1 : 0, area },
           });
@@ -186,7 +187,7 @@ const dmiWeather = {
     precip: { label: 'Rain mm/10 min', min: 0, max: 3 },
     radiation: { label: 'Sun W/m²', min: 0, max: 900 },
   },
-  defaults: { pitch: 'temp', velocity: 'wind', duration: 'humidity', bright: 'radiation', slots: [4], rate: 10, pitchRange: [48, 88], durationRange: [0.1, 0.8] },
+  defaults: { pitch: 'temp', velocity: 'wind', duration: 'humidity', bright: 'radiation', families: ['pipe', 'chromatic', 'strings'], register: 'wide', rate: 10 },
   enabledByDefault: true,
   start(ctx) {
     const seq = ctx.sequence(0.25);
@@ -204,7 +205,7 @@ const dmiWeather = {
           const { stationId, parameterId, value } = f.properties;
           const [lon, lat] = f.geometry.coordinates;
           let s = stations.get(stationId);
-          if (!s) stations.set(stationId, (s = { lat, lon, label: `station ${stationId}`, values: {} }));
+          if (!s) stations.set(stationId, (s = { lat, lon, key: stationId, label: `station ${stationId}`, values: {} }));
           s.values[MET_PARAMS[parameterId]] = value;
         }
       }
@@ -230,7 +231,7 @@ const dmiLightning = {
     strokes: { label: 'Strokes', min: 1, max: 8 },
     sensors: { label: 'Sensors' },
   },
-  defaults: { pitch: 'type', velocity: 'amp', duration: 'strokes', slots: [7, 3], slotMode: 'field', slotField: 'type', rate: 10, durationRange: [0.2, 3] },
+  defaults: { pitch: 'amp', velocity: 'amp', duration: 'strokes', families: ['drums', 'percussive', 'fx'], register: 'wide', rate: 10 },
   start(ctx) {
     const seen = new Set();
     const interval = 30000;
@@ -247,7 +248,7 @@ const dmiLightning = {
         fresh.map((f) => {
           const p = f.properties;
           const [lon, lat] = f.geometry.coordinates;
-          return { lat, lon, label: `⚡ ${p.amp} kA`, values: { amp: Math.abs(num(p.amp) || 0), type: num(p.type), strokes: num(p.strokes), sensors: num(p.sensors) } };
+          return { lat, lon, key: `type${p.type}`, label: `⚡ ${p.amp} kA`, values: { amp: Math.abs(num(p.amp) || 0), type: num(p.type), strokes: num(p.strokes), sensors: num(p.sensors) } };
         }),
         interval,
       );
@@ -270,7 +271,7 @@ const dmiOcean = {
     waterTemp: { label: 'Water temp °C', min: 0, max: 22 },
     angle: { label: 'Position on the coast tour', min: -Math.PI, max: Math.PI },
   },
-  defaults: { pitch: 'level', velocity: 'waterTemp', duration: 'none', bright: 'waterTemp', slots: [3], rate: 2, pitchRange: [40, 72], durationRange: [2.5, 2.5] },
+  defaults: { pitch: 'level', velocity: 'waterTemp', duration: 'waterTemp', bright: 'waterTemp', families: ['pad', 'ensemble'], register: 'low', rate: 2 },
   start(ctx) {
     const seq = ctx.sequence(2);
     ctx.poll(10 * 60000, async () => {
@@ -283,7 +284,7 @@ const dmiOcean = {
         for (const f of res.value.features || []) {
           const [lon, lat] = f.geometry.coordinates;
           const id = f.properties.stationId;
-          if (!st.has(id)) st.set(id, { lat, lon, label: `tide gauge ${id}`, values: { angle: Math.atan2(lat - 56, lon - 10.6) } });
+          if (!st.has(id)) st.set(id, { lat, lon, key: id, label: `tide gauge ${id}`, values: { angle: Math.atan2(lat - 56, lon - 10.6) } });
           st.get(id).values[key] = f.properties.value;
         }
       }
@@ -323,7 +324,7 @@ const openMeteo = {
     gust: { label: 'Gust m/s', min: 0, max: 30 },
     sun: { label: 'Sun W/m²', min: 0, max: 900 },
   },
-  defaults: { pitch: 'temp', velocity: 'gust', duration: 'cloud', bright: 'sun', slots: [5], rate: 6, durationRange: [0.2, 1.4] },
+  defaults: { pitch: 'temp', velocity: 'gust', duration: 'cloud', bright: 'sun', families: ['ethnic', 'guitar', 'pipe'], register: 'mid', rate: 6 },
   start(ctx) {
     const seq = ctx.sequence(0.5);
     ctx.poll(15 * 60000, async () => {
@@ -340,6 +341,7 @@ const openMeteo = {
           return {
             lat: CITIES[i][1],
             lon: CITIES[i][2],
+            key: CITIES[i][0],
             label: `${CITIES[i][0]} ${c.temperature_2m}°C`,
             values: {
               temp: c.temperature_2m, humidity: c.relative_humidity_2m, precip: c.precipitation, cloud: c.cloud_cover,
@@ -370,7 +372,7 @@ const airQuality = {
     temp: { label: 'Temperature °C', min: -12, max: 30 },
     humidity: { label: 'Humidity %', min: 30, max: 100 },
   },
-  defaults: { pitch: 'pm25', velocity: 'pm10', duration: 'humidity', bright: 'temp', slots: [4, 5], rate: 8, durationRange: [0.08, 0.5] },
+  defaults: { pitch: 'pm25', velocity: 'pm10', duration: 'humidity', bright: 'temp', families: ['chromatic', 'percussive'], register: 'high', rate: 8 },
   start(ctx) {
     const seq = ctx.sequence(0.25);
     const keys = { P2: 'pm25', P1: 'pm10', temperature: 'temp', humidity: 'humidity' };
@@ -382,7 +384,7 @@ const airQuality = {
         const lon = num(r.location.longitude);
         if (lat === undefined || !inDK(lat, lon)) continue;
         let l = locs.get(r.location.id);
-        if (!l) locs.set(r.location.id, (l = { lat, lon, label: `sensor @${r.location.id}`, values: {} }));
+        if (!l) locs.set(r.location.id, (l = { lat, lon, key: String(r.location.id), label: `sensor @${r.location.id}`, values: {} }));
         for (const v of r.sensordatavalues) if (keys[v.value_type]) l.values[keys[v.value_type]] = num(v.value);
       }
       const items = [...locs.values()].filter((l) => Object.keys(l.values).length).sort(byLon);
@@ -411,7 +413,7 @@ const bikeShare = {
     bikes: { label: 'Bikes available', log: true },
     fullness: { label: 'Station fullness', min: 0, max: 1 },
   },
-  defaults: { pitch: 'delta', velocity: 'bikes', duration: 'fullness', slots: [5, 1], slotMode: 'random', rate: 6, durationRange: [0.15, 0.7] },
+  defaults: { pitch: 'bikes', velocity: 'delta', duration: 'fullness', families: ['guitar', 'piano'], register: 'mid', rate: 6 },
   start(ctx) {
     let feeds = null;
     let info = null;
@@ -437,7 +439,7 @@ const bikeShare = {
         if (!first && (prev === undefined || prev === bikes)) continue;
         const cap = meta.capacity || bikes + (s.num_docks_available || 0) || 1;
         events.push({
-          lat: meta.lat, lon: meta.lon,
+          lat: meta.lat, lon: meta.lon, key: s.station_id,
           label: `${meta.name}: ${bikes} bikes${first ? '' : ` (${bikes - prev > 0 ? '+' : ''}${bikes - prev})`}`,
           values: { delta: first ? 0 : bikes - prev, bikes, fullness: Math.min(1, bikes / cap) },
         });
@@ -465,7 +467,7 @@ const aircraft = {
     track: { label: 'Heading °', min: 0, max: 360 },
     vrate: { label: 'Vertical rate ft/min', min: -3000, max: 3000 },
   },
-  defaults: { pitch: 'alt', velocity: 'speed', duration: 'track', bright: 'vrate', slots: [2], rate: 6, durationRange: [0.1, 0.6] },
+  defaults: { pitch: 'alt', velocity: 'speed', duration: 'track', bright: 'vrate', families: ['brass', 'lead', 'reed'], register: 'high', rate: 6 },
   start(ctx) {
     let useOpenSky = false;
     const interval = 20000;
@@ -490,7 +492,7 @@ const aircraft = {
       }
       planes = planes.filter((p) => p.lat != null && inDK(p.lat, p.lon)).sort(byLon);
       ctx.spread(
-        planes.map((p) => ({ lat: p.lat, lon: p.lon, label: `✈ ${p.id} ${Math.round(p.alt || 0)} ft`, values: { alt: p.alt, speed: p.speed, track: p.track, vrate: p.vrate } })),
+        planes.map((p) => ({ lat: p.lat, lon: p.lon, key: p.id, label: `✈ ${p.id} ${Math.round(p.alt || 0)} ft`, values: { alt: p.alt, speed: p.speed, track: p.track, vrate: p.vrate } })),
         interval,
       );
       return `${planes.length} aircraft${useOpenSky ? ' (OpenSky)' : ''}`;
