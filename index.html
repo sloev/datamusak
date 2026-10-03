@@ -19,8 +19,11 @@
 <body>
   <header class="top">
     <h1 class="hero">
-      <canvas id="logo" width="800" height="220" role="img" aria-label="datamusak"></canvas>
-      <img id="logo-fallback" alt="datamusak" width="800" height="220" hidden />
+      <!-- the 3 s, 45-frame loop rendered from js/logo.js by scripts/make-logo.mjs -->
+      <video id="logo" autoplay muted loop playsinline disablepictureinpicture preload="auto" poster="assets/logo.png" width="800" height="220" aria-label="datamusak">
+        <source src="assets/logo.webm" type="video/webm" />
+        <source src="assets/logo.mp4" type="video/mp4" />
+      </video>
     </h1>
     <div class="controls">
       <button id="power" class="power">▶ PLAY</button>
@@ -44,6 +47,15 @@
       <div id="tiles" class="tiles"></div>
     </section>
   </main>
+  <footer class="foot">
+    <div class="foot-buttons">
+      <button id="install" class="install" hidden>⬇ Install app</button>
+      <a class="coffee" href="https://www.buymeacoffee.com/sloev" target="_blank" rel="noopener">☕ Buy me a coffee</a>
+      <a class="foot-link" href="https://github.com/sloev/datamusak" target="_blank" rel="noopener">✦ Source</a>
+    </div>
+    <p id="install-hint" class="fine" hidden>On iPhone/iPad: tap Share, then “Add to Home Screen”.</p>
+    <p class="fine">made with <span id="made-with">🍄</span> by <a href="https://supernihil.github.io" target="_blank" rel="noopener">supernihil.github.io</a></p>
+  </footer>
   <dialog id="sheet" class="sheet"></dialog>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <filter id="rgb-split">

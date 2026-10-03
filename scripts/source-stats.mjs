@@ -15,6 +15,31 @@ await new Promise((r) => setTimeout(r, 800));
 const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
 const page = await browser.newPage({ reducedMotion: 'reduce' });
 page.on('pageerror', (e) => console.warn('page error:', e.message));
+// per-host request outcomes, so a failing source shows *why* (HTTP status, CORS, DNS, refused…)
+const hosts = {};
+const host = (u) => {
+  try {
+    return new URL(u).host;
+  } catch {
+    return u;
+  }
+};
+const note = (u, what) => {
+  const h = host(u);
+  if (h.startsWith('localhost')) return;
+  const e = (hosts[h] ??= {});
+  e[what] = (e[what] || 0) + 1;
+};
+page.on('response', (r) => {
+  note(r.url(), `HTTP ${r.status()}`);
+  if (r.request().resourceType() === 'fetch' && !r.headers()['access-control-allow-origin']) note(r.url(), 'no CORS header');
+});
+page.on('requestfailed', (r) => note(r.url(), r.failure()?.errorText || 'failed'));
+page.on('websocket', (ws) => {
+  note(ws.url(), 'websocket opened');
+  ws.on('socketerror', (e) => note(ws.url(), `websocket error: ${e}`));
+  ws.on('close', () => note(ws.url(), 'websocket closed'));
+});
 await page.goto(`http://localhost:${PORT}/`);
 await page.waitForFunction(() => window.datamusak);
 
@@ -38,8 +63,9 @@ const result = await page.evaluate(() => {
 await browser.close();
 server.kill();
 
-const stats = { checkedAt: new Date().toISOString(), seconds: SECONDS, sources: result };
+const stats = { checkedAt: new Date().toISOString(), seconds: SECONDS, sources: result, hosts };
 fs.mkdirSync('stats', { recursive: true });
 fs.writeFileSync('stats/sources.json', JSON.stringify(stats, null, 2) + '\n');
 const rows = Object.entries(result).sort((a, b) => b[1].eventsPerMin - a[1].eventsPerMin);
 for (const [id, r] of rows) console.log(`${r.status.padEnd(10)} ${String(r.eventsPerMin).padStart(8)}/min  ${id}  ${r.message}`);
+for (const [h, e] of Object.entries(hosts)) console.log(h.padEnd(40), JSON.stringify(e));

@@ -7,6 +7,35 @@ import { LIBS } from './lazy.js';
 
 export { DRUMS };
 
+// The sample sets Radio Nabovarme used, first; then its sound fonts in order of preference.
+const ORIGINAL_TONES = {
+  4: '0040_SBLive_sf2', // electric piano
+  9: '0090_SBLive_sf2', // glockenspiel
+  10: '0100_FluidR3_GM_sf2_file', // music box
+  12: '0120_FluidR3_GM_sf2_file', // marimba
+  35: '0350_GeneralUserGS_sf2_file', // fretless bass
+  75: '0750_FluidR3_GM_sf2_file', // pan flute
+  126: '1260_Aspirin_sf2_file', // applause
+};
+const FONT_ORDER = ['FluidR3_GM_sf2_file', 'GeneralUserGS_sf2_file', 'SBLive_sf2', 'JCLive_sf2_file', 'Chaos_sf2_file', 'Aspirin_sf2_file'];
+// Radio Nabovarme's JCLive drum kit (not all of these are in WebAudioFont's key list, but the files exist)
+const ORIGINAL_DRUMS = { 35: '35_17_JCLive_sf2_file', 40: '40_1_JCLive_sf2_file', 42: '42_1_JCLive_sf2_file', 51: '51_1_JCLive_sf2_file', 50: '50_1_JCLive_sf2_file', 48: '48_1_JCLive_sf2_file', 41: '41_1_JCLive_sf2_file' };
+const SOUND = 'https://surikov.github.io/webaudiofontdata/sound/';
+
+export function toneInfo(loader, program) {
+  const pad = String(program).padStart(3, '0');
+  const keys = loader.instrumentKeys().filter((k) => k.startsWith(pad));
+  const key = ORIGINAL_TONES[program] || FONT_ORDER.map((f) => keys.find((k) => k.endsWith('_' + f))).find(Boolean);
+  if (!key) return loader.instrumentInfo(loader.findInstrument(program));
+  return { variable: '_tone_' + key, url: SOUND + key + '.js' };
+}
+
+export function drumInfo(loader, note) {
+  const key = ORIGINAL_DRUMS[note] || loader.drumKeys().find((k) => k.startsWith(note + '_') && k.endsWith('_JCLive_sf2_file'));
+  if (!key) return loader.drumInfo(loader.findDrum(note));
+  return { variable: '_drum_' + key, url: SOUND + '128' + key + '.js' };
+}
+
 export class AudioEngine {
   constructor(state) {
     this.state = state;
@@ -98,9 +127,7 @@ export class AudioEngine {
     this.loading.set(program, []);
     const loader = this.player.loader;
     const infos =
-      program === DRUMS
-        ? DRUM_NOTES.map((n) => [n, loader.drumInfo(loader.findDrum(n))])
-        : [[null, loader.instrumentInfo(loader.findInstrument(program))]];
+      program === DRUMS ? DRUM_NOTES.map((n) => [n, drumInfo(loader, n)]) : [[null, toneInfo(loader, program)]];
     for (const [, info] of infos) loader.startLoad(this.ctx, info.url, info.variable);
     const started = performance.now();
     const check = () => {
