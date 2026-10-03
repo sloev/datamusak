@@ -130,17 +130,19 @@ export function createRuntime(src, cfg, { emit, setStatus, getBpm }) {
     },
 
     // WebSocket with reconnect + backoff.
-    ws(url, { onOpen, onMessage }) {
+    // onState(up) replaces the status updates (for sources that pool several sockets).
+    ws(url, { onOpen, onMessage, onState }) {
       let sock;
       let retry = 2000;
       let timer;
+      const report = onState ? (kind) => onState(kind === 'ok') : (kind, msg) => ctx.status(kind, msg);
       const open = () => {
         if (stopped) return;
-        ctx.status('connecting', url);
+        report('connecting', url);
         sock = new WebSocket(url);
         sock.onopen = () => {
           retry = 2000;
-          ctx.status('ok', 'connected');
+          report('ok', 'connected');
           onOpen && onOpen(sock);
         };
         sock.onmessage = (m) => {
@@ -148,10 +150,10 @@ export function createRuntime(src, cfg, { emit, setStatus, getBpm }) {
             onMessage(m.data, sock);
           } catch {}
         };
-        sock.onerror = () => ctx.status('error', 'websocket error');
+        sock.onerror = () => report('error', 'websocket error');
         sock.onclose = () => {
           if (stopped) return;
-          ctx.status('connecting', `closed, retrying in ${retry / 1000}s`);
+          report('connecting', `closed, retrying in ${retry / 1000}s`);
           timer = setTimeout(open, retry);
           retry = Math.min(60000, retry * 2);
         };

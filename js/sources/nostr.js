@@ -12,8 +12,16 @@ export const hash = (s) => {
 export function subscribe(ctx, filter, onEvent) {
   const seen = new Set();
   const order = [];
+  const up = new Set();
+  const state = (url, ok) => {
+    if (ok) up.add(url);
+    else up.delete(url);
+    if (up.size) ctx.status('ok', `${up.size}/${RELAYS.length} relays`);
+    else ctx.status('connecting', `connecting to ${RELAYS.length} relays…`);
+  };
   for (const url of RELAYS) {
     ctx.ws(url, {
+      onState: (ok) => state(url, ok),
       onOpen: (s) => s.send(JSON.stringify(['REQ', 'dm' + Math.random().toString(36).slice(2, 8), { ...filter, since: Math.floor(Date.now() / 1000), limit: 0 }])),
       onMessage(data) {
         const m = JSON.parse(data);

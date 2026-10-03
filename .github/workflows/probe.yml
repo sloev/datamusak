@@ -7,26 +7,38 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          for u in \
-            "https://api.energidataservice.dk/dataset/PowerSystemRightNow?limit=1" \
-            "https://stables.donkey.bike/api/public/gbfs/3.0/donkey_copenhagen/gbfs.json" \
-            "https://gbfs.api.ridedott.com/public/v2/copenhagen/gbfs.json" \
-            "https://api.adsb.lol/v2/point/56.0/11.0/250" \
-            "https://opendata.adsb.fi/api/v2/lat/56/lon/11/dist/250" \
-            "https://driftsdata.statnett.no/restapi/ProductionConsumption/GetLatestDetailedOverview" \
-            "https://driftsdata.statnett.no/restapi/PhysicalFlowMap/GetFlow" \
-            "https://www.svk.se/services/controlroom/v2/map/price?date=2026-10-03&ticks=1" \
-            "https://api.energy-charts.info/public_power?country=dk" \
-            "https://api.energy-charts.info/cbet?country=dk" \
-            "https://mempool.space/api/v1/fees/recommended" \
-            ; do
-            echo "=== $u"
-            curl -s -m 25 -D hdr.txt -o body.txt -H 'Origin: https://sloev.github.io' "$u" || echo "curl failed $?"
-            cat hdr.txt | tr -d '\r' | grep -viE '^(date|set-cookie|strict-transport|x-content|cf-|report-to|nel|server-timing|alt-svc)'
-            head -c 400 body.txt; echo
+          probe() { echo "=== $2 [$1]"; curl -s -m 25 -D hdr.txt -o body.txt ${1:+-H "Origin: $1"} "$2" || echo "curl failed $?"; tr -d '\r' < hdr.txt | grep -iE '^HTTP|access-control-allow-origin|content-length|content-type'; head -c 500 body.txt; echo; }
+          E="https://api.energidataservice.dk/dataset/PowerSystemRightNow?limit=1"
+          probe "" "$E"; probe "http://localhost:8000" "$E"; probe "https://example.com" "$E"; probe "null" "$E"
+          probe "https://sloev.github.io" "https://api.energidataservice.dk/dataset/Elspotprices?limit=1"
+          D=$(date -u +%F)
+          for p in "situation?date=$D" "map/flow?date=$D&ticks=1" "map/consumption?date=$D&ticks=1" "map/production?date=$D&ticks=1" "map/wind?date=$D&ticks=1" "map/price?date=$D" "flow?date=$D" ; do
+            probe "https://sloev.github.io" "https://www.svk.se/services/controlroom/v2/$p"
           done
-          echo "=== preflight energidataservice"
-          curl -s -m 20 -X OPTIONS -D - -o /dev/null -H 'Origin: https://sloev.github.io' -H 'Access-Control-Request-Method: GET' "https://api.energidataservice.dk/dataset/PowerSystemRightNow?limit=1" | tr -d '\r'
-          echo "=== mempool ws"
-          npx -y wscat@6 -c wss://mempool.space/api/v1/ws -x '{"action":"want","data":["stats"]}' -w 8 2>&1 | head -c 1500 || true
-          npx -y wscat@6 -c wss://mempool.space/api/v1/ws -x '{"track-mempool-txids":true}' -w 8 2>&1 | head -c 1500 || true
+          probe "https://sloev.github.io" "https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices?date=$D&market=DayAhead&deliveryArea=DK1&currency=EUR"
+          probe "https://sloev.github.io" "https://adsb.lol/re-api/?circle=56,11,250"
+          probe "https://sloev.github.io" "https://globe.adsb.fi/re-api/?circle=56,11,250"
+          probe "https://sloev.github.io" "https://api.adsb.lol/api/0/routeset"
+          probe "https://sloev.github.io" "https://data.vatsim.net/v3/vatsim-data.json"
+          probe "https://sloev.github.io" "https://gbfs.api.ridedott.com/public/v2/copenhagen/free_bike_status.json"
+          probe "https://sloev.github.io" "https://gbfs.api.ridedott.com/public/v2/aarhus/gbfs.json"
+          probe "https://sloev.github.io" "https://gbfs.api.ridedott.com/public/v2/odense/gbfs.json"
+          curl -s https://raw.githubusercontent.com/MobilityData/gbfs/master/systems.csv | grep -E '^(DK|SE|NO),' | head -40
+          cat > ws.mjs <<'JS'
+          const urls = ['wss://nos.lol','wss://relay.damus.io','wss://relay.primal.net','wss://nostr.mom','wss://relay.snort.social','wss://offchain.pub','wss://nostr.wine','wss://relay.nostr.band','wss://nostr-01.yakihonne.com','wss://nostr.data.haus','wss://relay.artio.inf.unibe.ch','wss://yabu.me','wss://ws.blockchain.info/inv','wss://mempool.space/api/v1/ws'];
+          await Promise.all(urls.map((u) => new Promise((res) => {
+            let n = 0; const t0 = Date.now();
+            const s = new WebSocket(u);
+            const done = (why) => { console.log(u.padEnd(40), why, 'msgs', n, Date.now() - t0 + 'ms'); try { s.close(); } catch {} res(); };
+            const to = setTimeout(() => done('timeout-ok'), 10000);
+            s.onopen = () => {
+              if (u.includes('blockchain')) s.send(JSON.stringify({ op: 'unconfirmed_sub' }));
+              else if (u.includes('mempool')) s.send(JSON.stringify({ 'track-mempool': true }));
+              else s.send(JSON.stringify(['REQ', 'x', { kinds: [1], since: Math.floor(Date.now() / 1000), limit: 0 }]));
+            };
+            s.onmessage = (m) => { n++; if (n === 1 && u.includes('mempool')) console.log('mempool first:', String(m.data).slice(0, 600)); };
+            s.onerror = (e) => { clearTimeout(to); done('error ' + (e.message || '')); };
+            s.onclose = (e) => { clearTimeout(to); done('closed ' + e.code); };
+          })));
+          JS
+          node ws.mjs
