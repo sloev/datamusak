@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>datamusak</title>
+  <meta name="description" content="Live open data from Denmark and beyond, turned into music in your browser." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%B6%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mqtt@5.16.0/dist/mqtt.min.js"></script>
+  <script src="https://surikov.github.io/webaudiofont/npm/dist/WebAudioFontPlayer.js"></script>
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <header>
+    <h1>datamusak</h1>
+    <button id="power" class="power">▶ Start</button>
+    <div id="globals" class="globals"></div>
+  </header>
+  <main>
+    <section class="stage">
+      <div class="map-wrap">
+        <div id="map"></div>
+        <div class="map-views">
+          <button data-view="dk">Denmark</button><button data-view="nordic">Nordic</button><button data-view="world">World</button>
+        </div>
+      </div>
+      <div class="roll-wrap"><canvas id="roll"></canvas></div>
+      <div class="log-wrap">
+        <div class="log-head">
+          <strong>Raw data → MIDI</strong>
+          <label><input type="checkbox" id="log-played" /> only played</label>
+          <label><input type="checkbox" id="log-pause" /> pause</label>
+        </div>
+        <div id="log" class="log"></div>
+      </div>
+    </section>
+    <aside class="panel">
+      <nav class="tabs">
+        <button data-tab="sources" class="active">Sources</button>
+        <button data-tab="instruments">Instruments</button>
+        <button data-tab="about">About</button>
+      </nav>
+      <div id="tab-sources" class="tab"></div>
+      <div id="tab-instruments" class="tab" hidden></div>
+      <div id="tab-about" class="tab about" hidden>
+        <p><strong>datamusak</strong> listens to live open data — the Danish power grid, DMI weather stations, lightning, tide gauges, air-quality sensors, bike share, aircraft, ships on open MQTT brokers, Wikipedia edits, Bluesky posts and more — and turns every data point into a note.</p>
+        <p>Each source has a <em>mapping</em>: choose which data field drives pitch, velocity, note length, stereo pan and brightness (sent as MIDI CC74), the value range for each, and which instruments it plays. Pitch is always snapped to the chosen scale. Fields without a fixed physical range learn their range automatically from recent data.</p>
+        <p>Slow data (prices, weather, grid) is played as a looping step sequence over the latest values, so it changes gradually as new data arrives. Fast streams (ships, edits, posts, trades) trigger notes directly and are limited by <em>max notes/s</em>.</p>
+        <p>Everything runs in your browser: data is fetched directly from each provider's public, CORS-enabled API or WebSocket. If a provider is down or blocks browsers, its status dot turns red — the rest keep playing.</p>
+        <p>Enable <em>MIDI out</em> to drive a DAW or hardware synth (Chrome/Edge): instrument slot <em>n</em> sends on channel <em>n</em>, drums on channel 10.</p>
+        <p><button id="reset">Reset all settings</button></p>
+      </div>
+    </aside>
+  </main>
+</body>
+</html>
