@@ -9,23 +9,24 @@ jobs:
       - run: |
           for u in \
             "https://api.energidataservice.dk/dataset/PowerSystemRightNow?limit=1" \
-            "https://api.energidataservice.dk/dataset/PowerSystemRightNow?limit=5&sort=Minutes1UTC%20DESC" \
-            "https://api.energidataservice.dk/dataset/CO2Emis?limit=1" \
-            "https://stables.donkey.bike/api/public/gbfs/2/donkey_copenhagen/gbfs.json" \
-            "https://stables.donkey.bike/api/public/gbfs/2/donkey_cph/gbfs.json" \
-            "https://gbfs.donkey.bike/api/public/gbfs/2/donkey_copenhagen/gbfs.json" \
+            "https://stables.donkey.bike/api/public/gbfs/3.0/donkey_copenhagen/gbfs.json" \
+            "https://gbfs.api.ridedott.com/public/v2/copenhagen/gbfs.json" \
             "https://api.adsb.lol/v2/point/56.0/11.0/250" \
-            "https://api.adsb.lol/v2/lat/56.0/lon/11.0/dist/250" \
-            "https://api.airplanes.live/v2/point/56/11/250" \
             "https://opendata.adsb.fi/api/v2/lat/56/lon/11/dist/250" \
-            "https://api.adsb.one/v2/point/56/11/250" \
-            "https://opensky-network.org/api/states/all?lamin=54.4&lomin=7.5&lamax=58&lomax=15.6" \
-            "https://mempool.space/api/mempool/recent" \
-            "https://api.blockchain.info/haskoin-store/btc/mempool" \
+            "https://driftsdata.statnett.no/restapi/ProductionConsumption/GetLatestDetailedOverview" \
+            "https://driftsdata.statnett.no/restapi/PhysicalFlowMap/GetFlow" \
+            "https://www.svk.se/services/controlroom/v2/map/price?date=2026-10-03&ticks=1" \
+            "https://api.energy-charts.info/public_power?country=dk" \
+            "https://api.energy-charts.info/cbet?country=dk" \
+            "https://mempool.space/api/v1/fees/recommended" \
             ; do
             echo "=== $u"
-            curl -s -m 25 -D - -o body.txt -H 'Origin: https://sloev.github.io' "$u" | grep -iE '^HTTP|access-control-allow-origin|^location|^content-type' || echo "curl failed $?"
-            head -c 300 body.txt; echo
+            curl -s -m 25 -D hdr.txt -o body.txt -H 'Origin: https://sloev.github.io' "$u" || echo "curl failed $?"
+            cat hdr.txt | tr -d '\r' | grep -viE '^(date|set-cookie|strict-transport|x-content|cf-|report-to|nel|server-timing|alt-svc)'
+            head -c 400 body.txt; echo
           done
-          echo "=== bikeshare systems list"
-          curl -s -m 25 https://raw.githubusercontent.com/MobilityData/gbfs/master/systems.csv | grep -iE 'denmark|,DK,|copenhagen|københavn|aarhus|odense' | head -30
+          echo "=== preflight energidataservice"
+          curl -s -m 20 -X OPTIONS -D - -o /dev/null -H 'Origin: https://sloev.github.io' -H 'Access-Control-Request-Method: GET' "https://api.energidataservice.dk/dataset/PowerSystemRightNow?limit=1" | tr -d '\r'
+          echo "=== mempool ws"
+          npx -y wscat@6 -c wss://mempool.space/api/v1/ws -x '{"action":"want","data":["stats"]}' -w 8 2>&1 | head -c 1500 || true
+          npx -y wscat@6 -c wss://mempool.space/api/v1/ws -x '{"track-mempool-txids":true}' -w 8 2>&1 | head -c 1500 || true
