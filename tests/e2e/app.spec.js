@@ -169,6 +169,19 @@ test.describe('PWA', () => {
     expect(cached).toContain('/js/main.js');
     expect(cached).toContain('/vendor/titan-one.woff2');
   });
+
+  test('the app still boots on reloads served by the service worker', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+    for (let i = 0; i < 2; i++) {
+      await page.reload();
+      expect(await page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+      await expect(page.locator('.source').first()).toBeVisible();
+      await expect(page.locator('#map.leaflet-container')).toBeVisible();
+      await expect(page.locator('#globals select').first()).toBeVisible();
+    }
+  });
 });
 
 test('heavy libraries are not loaded until needed', async ({ page }) => {

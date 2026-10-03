@@ -1,10 +1,11 @@
 // datamusak service worker.
-// - App shell: precached, served stale-while-revalidate (instant loads, fresh on the next visit).
+// - App shell (html/css/js): network-first with revalidation, so a deploy is never mixed with
+//   stale files from the HTTP cache; the precached copy is the offline fallback.
 // - vendor/ libs and WebAudioFont instrument samples: cache-first (immutable, the heavy stuff).
 // - Live data, map tiles, relays: straight to the network (never cached here).
 const VERSION = '__VERSION__';
 const SHELL = `shell-${VERSION}`;
-const STATIC = 'static-v1';
+const STATIC = `vendor-${VERSION}`;
 const SAMPLES = 'samples-v1';
 
 const PRECACHE = [
@@ -18,13 +19,18 @@ const PRECACHE = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(SHELL).then((c) => c.addAll(PRECACHE)).then(() => self.skipWaiting()));
+  // cache: 'reload' bypasses the HTTP cache, so the precache can't capture files from an older deploy.
+  e.waitUntil(
+    caches.open(SHELL)
+      .then((c) => c.addAll(PRECACHE.map((u) => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('shell-') && k !== SHELL).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => /^(shell|vendor|static)-/.test(k) && k !== SHELL && k !== STATIC).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
@@ -37,8 +43,10 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(cacheFirst(SAMPLES, req));
   } else if (url.origin === location.origin && url.pathname.includes('/vendor/')) {
     e.respondWith(cacheFirst(STATIC, req));
+  } else if (url.origin === location.origin && url.pathname.includes('/assets/')) {
+    e.respondWith(cacheFirst(SHELL, req));
   } else if (url.origin === location.origin) {
-    e.respondWith(staleWhileRevalidate(req, e));
+    e.respondWith(networkFirst(req));
   }
   // everything else: default network behaviour
 });
@@ -52,18 +60,17 @@ async function cacheFirst(name, req) {
   return res;
 }
 
-async function staleWhileRevalidate(req, e) {
+async function networkFirst(req) {
   const cache = await caches.open(SHELL);
-  const hit = await cache.match(req, { ignoreSearch: true });
-  const fresh = fetch(req)
-    .then((res) => {
-      if (res.ok) cache.put(req, res.clone());
-      return res;
-    })
-    .catch(() => hit);
-  if (hit) {
-    e.waitUntil(fresh);
-    return hit;
+  try {
+    // 'no-cache' = revalidate with the server (cheap 304s), never trust a stale HTTP-cache copy
+    // (a navigation Request can't be re-issued with options, so fetch by URL)
+    const res = await fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' });
+    if (res.ok) cache.put(req, res.clone());
+    return res;
+  } catch (err) {
+    const hit = await cache.match(req, { ignoreSearch: true });
+    if (hit) return hit;
+    throw err;
   }
-  return fresh;
 }
