@@ -78,7 +78,7 @@ input[type='checkbox']:checked::after { content: '✓'; font: 13px/1 var(--displ
   animation: zz 1.47s steps(22) infinite;
 }
 @keyframes zz { to { background-position: -22px 0; } }
-.hero { margin: 0; line-height: 0; flex: 1 1 360px; max-width: 600px; }
+.hero { margin: 0; line-height: 0; flex: 1 1 360px; max-width: min(600px, max(360px, 36vw)); }
 .hero video { width: 100%; height: auto; aspect-ratio: 800 / 220; display: block; background: var(--black); object-fit: contain; }
 .controls { display: flex; align-items: center; gap: 12px; }
 .power { font-size: clamp(16px, 2.4vw, 22px); padding: 12px 24px; border: 0; color: var(--ink); background: var(--ye); --sh: var(--pk); }
@@ -86,6 +86,10 @@ input[type='checkbox']:checked::after { content: '✓'; font: 13px/1 var(--displ
 .power.on { background: var(--li); --sh: var(--ul); animation: beat var(--beat) steps(6) infinite; }
 @keyframes beat { 0% { scale: 1.1; } 20% { scale: 1.04; } 40%, 100% { scale: 1; } }
 .power:active { translate: 3px 3px; }
+.power.nudge { animation: nudge 1.6s steps(1) infinite; } /* until the first play */
+@keyframes nudge { 0%, 70% { scale: 1; } 75% { scale: 1.08; } 85% { scale: 1.02; } }
+.tagline { margin: 0 4px; font: 500 12.5px/1.4 system-ui, sans-serif; color: var(--white); opacity: 0.85; }
+.tagline b { color: var(--ye); }
 .rec { font-size: 13px; padding: 10px 14px; }
 .rec.on { border: 0; color: var(--white); background: var(--pk); --sh: var(--ye); animation: beat var(--beat) steps(6) infinite; }
 .rec.on:hover { color: var(--white); }
@@ -98,6 +102,7 @@ input[type='checkbox']:checked::after { content: '✓'; font: 13px/1 var(--displ
 /* ---------- layout ---------- */
 .app { flex: 1; min-height: 0; display: grid; gap: var(--gap); padding: var(--gap); grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(300px, 58dvh) auto; }
 .stage, .dock { min-width: 0; }
+@media (max-width: 700px) { .app { grid-template-rows: minmax(240px, 44dvh) auto; } }
 @media (min-width: 1000px) {
   body { height: 100dvh; }
   .app { grid-template-columns: minmax(0, 1fr) clamp(320px, 30vw, 440px); grid-template-rows: minmax(0, 1fr); }
@@ -144,18 +149,20 @@ input[type='checkbox']:checked::after { content: '✓'; font: 13px/1 var(--displ
 .tile { position: relative; animation: domino 0.6s steps(9) both; animation-delay: calc(var(--i, 0) * 45ms); }
 @keyframes domino { from { transform: perspective(600px) rotateY(-360deg); opacity: 0; } 15% { opacity: 1; } to { transform: none; } }
 .tile-main {
-  width: 100%; min-height: 92px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: start; gap: 6px 10px;
-  text-align: left; text-transform: none; letter-spacing: 0; padding: 10px 30px 10px 10px; border-radius: 16px;
+  width: 100%; min-height: 92px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: start; align-items: center; gap: 8px;
+  text-align: left; text-transform: none; letter-spacing: 0; padding: 10px; border-radius: 16px;
   background: var(--black); border: 2px solid var(--white); color: var(--white);
 }
 .tile-main:hover { color: var(--white); border-color: var(--c); }
 .tile.on .tile-main, .tile.on .tile-main:hover { background: var(--c); border: 0; color: var(--fg); }
-.sticker { width: 28px; height: 28px; border-radius: 50%; background: var(--c); grid-row: span 2; }
+.sticker { width: 24px; height: 24px; border-radius: 50%; background: var(--c); }
 .tile.on .sticker { background: var(--black); box-shadow: 0 0 0 2px var(--ink), 2px 2px 0 2px var(--white); }
 .tile-main:hover .sticker { animation: flip 0.8s steps(12); }
 @keyframes flip { to { transform: perspective(200px) rotateY(360deg); } }
-.tile-name { font: 400 14px/1.05 var(--display); text-transform: uppercase; letter-spacing: -0.02em; overflow-wrap: anywhere; }
-.tile-sub { display: flex; align-items: center; gap: 6px; font: 600 11px system-ui, sans-serif; }
+.tile-name { grid-column: 1 / -1; grid-row: 2; font: 400 15px/1.05 var(--display); text-transform: uppercase; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.tile-name.long { font-size: 13px; }
+.tile-name.longer { font-size: 11.5px; }
+.tile-sub { display: flex; align-items: center; gap: 6px; padding-right: 26px; font: 600 11px system-ui, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meter { grid-column: 1 / -1; height: 8px; border-radius: 99px; background: var(--checks-sm); overflow: hidden; position: relative; }
 .meter::after { content: ''; position: absolute; inset: 0 auto 0 0; width: calc(var(--m, 0) * 100%); background: var(--c); transition: width 0.4s steps(4); }
 .tile.on .meter::after { background: var(--fg); }
@@ -168,7 +175,7 @@ input[type='checkbox']:checked::after { content: '✓'; font: 13px/1 var(--displ
 
 /* ---------- chips ---------- */
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip { font-size: 11px; padding: 6px 11px; white-space: nowrap; }
+.chip { font-size: 11px; padding: 6px 11px; white-space: nowrap; flex: none; }
 .chip.on { border: 0; padding: 8px 13px; color: var(--ink); background: var(--ye); --sh: var(--vi); }
 .chip.on:hover { color: var(--ink); }
 

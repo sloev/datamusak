@@ -26,9 +26,9 @@
       </video>
     </h1>
     <div class="controls">
-      <button id="power" class="power">▶ PLAY</button>
+      <button id="power" class="power nudge" title="Play / stop (Space)">▶ PLAY</button>
       <button id="rec" class="rec" aria-pressed="false" title="Record up to a minute: sound + MIDI file">● REC</button>
-      <button id="online" class="online" title="See and hear other listeners (peer-to-peer)">○ offline</button>
+      <button id="online" class="online" title="People listening right now (peer-to-peer). Tap to leave or join.">○ offline</button>
       <button id="open-settings" class="gear" aria-label="Settings">⚙</button>
     </div>
   </header>
@@ -43,6 +43,7 @@
       <div id="log" class="log" hidden></div>
     </section>
     <section class="dock" aria-label="Data sources">
+      <p class="tagline">Live open data from Denmark and beyond, played as music. <b>Tap a source to listen</b>; ⋯ shapes its sound.</p>
       <nav id="filters" class="filters"></nav>
       <div id="tiles" class="tiles"></div>
     </section>

@@ -20,7 +20,7 @@ Mapping is **deterministic**: the same data always makes the same sound. Nothing
 
 ## Features
 
-- **27 live sources**, each a tile. Tap to switch it on; tap ⋯ to choose its instrument families, range (low/mid/high/wide), volume, how busy it may be, and (folded away) which data field drives what.
+- **27 live sources**, each a tile. Tap one to hear it (that also starts playback; Space plays/stops); tap ⋯ to choose its instrument families, range (low/mid/high/wide), volume, how busy it may be, and (folded away) which data field drives what.
 - **Settings** (⚙): one tab at a time (Music, Sound, Mixer, Presets, Recordings, MIDI, About), with **Save** always on top.
 - **Presets**: save in the browser, start from built-ins, and load, share (as a link with the whole setup, `#p=…`) or delete each one.
 - **Recording** (● REC): up to a minute of what you hear plus a **MIDI file** of every note. Recordings stay in your browser and can be played, downloaded or shared.

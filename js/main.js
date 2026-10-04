@@ -143,7 +143,9 @@ function restartSource(src) {
 function setEnabled(src, on) {
   state.sources[src.id].enabled = on;
   soundMap.setEnabled(src.id, on);
-  if (powered) on ? startSource(src) : stopSource(src.id);
+  // switching a source on means "let me hear it", so it also starts playback
+  if (on && !powered) $('#power').onclick();
+  else if (powered) on ? startSource(src) : stopSource(src.id);
   save();
   renderTile(src);
 }
@@ -155,7 +157,8 @@ function setStatus(id, kind, msg) {
 }
 const statusLine = (id) => {
   const st = statusOf.get(id) || { kind: 'idle', msg: '' };
-  return h('p', { class: 'status-line', 'data-status': id }, h('span', { class: 'status ' + st.kind }), ' ', st.msg || (powered ? '' : 'press PLAY to connect'));
+  const idle = !state.sources[id].enabled ? 'off' : powered ? 'connecting…' : 'on — press PLAY to connect';
+  return h('p', { class: 'status-line', 'data-status': id }, h('span', { class: 'status ' + st.kind }), ' ', st.kind === 'idle' ? idle : st.msg || (st.kind === 'ok' ? 'connected' : st.kind));
 };
 
 // ● REC: up to a minute of sound + a MIDI file of the same notes
@@ -182,8 +185,10 @@ $('#power').onclick = async () => {
   glitch();
   $('#power').textContent = powered ? '■ STOP' : '▶ PLAY';
   $('#power').classList.toggle('on', powered);
+  $('#power').classList.remove('nudge');
   if (powered) {
     await audio.start();
+    if (!powered) return; // stopped again while the audio engine was starting
     for (const src of SOURCES) if (state.sources[src.id].enabled) startSource(src);
   } else {
     await stopRecording();
@@ -192,6 +197,13 @@ $('#power').onclick = async () => {
     await audio.stop();
   }
 };
+
+// Space plays / stops, unless typing or on a focused control (where Space already means "press")
+addEventListener('keydown', (e) => {
+  if (e.code !== 'Space' || e.repeat || e.target.closest?.('input, select, textarea, button, a, [contenteditable], dialog[open]')) return;
+  e.preventDefault();
+  $('#power').onclick();
+});
 
 // ----------------------------------------------------------------- tiles
 
@@ -237,8 +249,8 @@ const perMin = (n) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${
 const offLabel = (src) => {
   const w = weekly[src.id];
   if (!w) return 'off';
-  if (w.status === 'error') return 'off · was down';
-  return w.eventsPerMin ? `off · ~${perMin(w.eventsPerMin)}/min` : 'off';
+  if (w.status === 'error') return 'was down';
+  return w.eventsPerMin ? `~${perMin(w.eventsPerMin)}/min` : 'off';
 };
 
 function renderTiles() {
@@ -258,14 +270,19 @@ function fillTile(el, src) {
   const rate = engine.eventsPerMinute(src.id);
   el.classList.toggle('on', cfg.enabled);
   el.replaceChildren(
-    h('button', { class: 'tile-main', 'aria-pressed': String(cfg.enabled), title: cfg.enabled ? 'Switch off' : 'Switch on', onclick: () => setEnabled(src, !cfg.enabled) },
+    h('button', { class: 'tile-main', 'aria-pressed': String(cfg.enabled), title: `${src.name} — ${cfg.enabled ? 'tap to switch off' : 'tap to listen'}`, onclick: () => setEnabled(src, !cfg.enabled) },
       h('span', { class: 'sticker' }),
-      h('span', { class: 'tile-name' }, src.short || src.name),
+      h('span', { class: 'tile-name' + fit(src.short || src.name) }, src.short || src.name),
       h('span', { class: 'tile-sub' }, h('span', { class: 'status ' + st.kind }), cfg.enabled ? (rate ? `${perMin(rate)}/min` : st.kind === 'error' ? 'unreachable' : powered ? 'listening…' : 'on') : offLabel(src)),
       h('span', { class: 'meter', style: `--m:${Math.min(1, rate / 120)}` })),
     h('button', { class: 'tile-more', 'aria-label': `Settings for ${src.name}`, onclick: () => openSource(src.id) }, '⋯'),
   );
 }
+// long single words ("EARTHQUAKES") get a smaller size instead of breaking mid-word
+const fit = (name) => {
+  const longest = Math.max(...name.split(/\s+/).map((w) => w.length));
+  return longest > 10 ? ' longer' : longest > 8 ? ' long' : '';
+};
 function renderTile(src) {
   const el = src && tileOf(src.id);
   if (el) fillTile(el, src);
