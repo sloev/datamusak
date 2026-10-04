@@ -441,17 +441,18 @@ function openSettings(tab = settingsTab, message = notice) {
         list.replaceChildren(
           ...(all.length ? [] : [h('p', { class: 'hint' }, `No recordings yet — press ● REC (up to ${MAX_SECONDS} s). You get the sound and a MIDI file of every note.`)]),
           ...all.map((r) => {
-            const src = URL.createObjectURL(r.audio);
+            // r.audio is null where this browser can't record sound (MIDI only)
+            const main = r.audio || r.midi;
             return h('div', { class: 'recording' },
-              h('div', { class: 'preset-name' }, h('strong', {}, new Date(r.created).toLocaleString('en-GB')), h('small', {}, `${r.seconds} s · ${r.notes} notes`)),
-              h('audio', { controls: true, src, preload: 'none' }),
+              h('div', { class: 'preset-name' }, h('strong', {}, new Date(r.created).toLocaleString('en-GB')), h('small', {}, `${r.seconds} s · ${r.notes} notes${r.audio ? '' : ' · MIDI only (this browser can’t record sound)'}`)),
+              r.audio ? h('audio', { controls: true, src: URL.createObjectURL(r.audio), preload: 'none' }) : null,
               h('div', { class: 'preset-actions' },
-                h('button', { onclick: () => download(r.audio, fileName(r, 'audio')) }, '⬇ Sound'),
+                r.audio ? h('button', { onclick: () => download(r.audio, fileName(r, 'audio')) }, '⬇ Sound') : null,
                 h('button', { onclick: () => download(r.midi, fileName(r, 'midi')) }, '⬇ MIDI'),
                 h('button', { onclick: async () => {
-                  const files = [new File([r.audio], fileName(r, 'audio'), { type: r.audio.type }), new File([r.midi], fileName(r, 'midi'), { type: 'audio/midi' })];
+                  const files = [...(r.audio ? [new File([r.audio], fileName(r, 'audio'), { type: r.audio.type })] : []), new File([r.midi], fileName(r, 'midi'), { type: 'audio/midi' })];
                   const res = await share('datamusak recording', { files });
-                  if (res === 'unsupported') { download(r.audio, fileName(r, 'audio')); msg.textContent = 'Sharing files isn’t supported here — downloaded instead.'; }
+                  if (res === 'unsupported') { download(main, fileName(r, r.audio ? 'audio' : 'midi')); msg.textContent = 'Sharing files isn’t supported here — downloaded instead.'; }
                 } }, 'Share'),
                 h('button', { class: 'x', onclick: async () => { await deleteRecording(r.id); openSettings('recordings'); } }, 'Delete')));
           }),
@@ -490,7 +491,7 @@ function renderOnline() {
 presence.on(renderOnline);
 $('#online').onclick = async () => {
   state.global.online = !presence.connected;
-  save();
+  saveNow(state); // a reload right after must remember it
   if (state.global.online) await presence.join();
   else presence.leave();
   renderOnline();

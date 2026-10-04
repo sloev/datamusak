@@ -31,14 +31,20 @@ export class Recorder {
   start() {
     const { ctx, master } = this.audio;
     if (!ctx || !master || this.active) return false;
-    const dest = ctx.createMediaStreamDestination();
-    master.connect(dest);
-    const mimeType = Recorder.mimeType();
-    const mr = new MediaRecorder(dest.stream, mimeType ? { mimeType } : undefined);
-    const rec = { mr, dest, chunks: [], notes: [], t0: ctx.currentTime, started: performance.now(), bpm: this.state.global.bpm };
-    mr.ondataavailable = (e) => e.data.size && rec.chunks.push(e.data);
-    rec.done = new Promise((resolve) => (mr.onstop = resolve));
-    mr.start(1000);
+    const rec = { mr: null, dest: null, chunks: [], notes: [], t0: ctx.currentTime, started: performance.now(), bpm: this.state.global.bpm };
+    // Sound, where the browser can record it; the MIDI file of the notes works everywhere.
+    try {
+      rec.dest = ctx.createMediaStreamDestination();
+      master.connect(rec.dest);
+      const mimeType = Recorder.mimeType();
+      rec.mr = new MediaRecorder(rec.dest.stream, mimeType ? { mimeType } : undefined);
+      rec.mr.ondataavailable = (e) => e.data.size && rec.chunks.push(e.data);
+      rec.done = new Promise((resolve) => (rec.mr.onstop = resolve));
+      rec.mr.start(1000);
+    } catch {
+      if (rec.dest) master.disconnect(rec.dest);
+      rec.mr = null;
+    }
     rec.timer = setTimeout(() => this.stop(), MAX_SECONDS * 1000);
     rec.tick = setInterval(() => this.onChange(), 500);
     this.active = rec;
@@ -61,10 +67,12 @@ export class Recorder {
     this.active = null;
     clearTimeout(rec.timer);
     clearInterval(rec.tick);
-    rec.mr.stop();
-    await rec.done;
+    if (rec.mr) {
+      rec.mr.stop();
+      await rec.done;
+    }
     try {
-      this.audio.master.disconnect(rec.dest);
+      if (rec.dest) this.audio.master.disconnect(rec.dest);
     } catch {}
     const created = Date.now();
     const recording = {
@@ -72,7 +80,7 @@ export class Recorder {
       created,
       seconds: Math.min(MAX_SECONDS, Math.round((performance.now() - rec.started) / 100) / 10),
       notes: rec.notes.length,
-      audio: new Blob(rec.chunks, { type: rec.mr.mimeType || 'audio/webm' }),
+      audio: rec.mr && rec.chunks.length ? new Blob(rec.chunks, { type: rec.mr.mimeType || 'audio/webm' }) : null,
       midi: new Blob([writeMidi(rec.notes, { bpm: rec.bpm })], { type: 'audio/midi' }),
     };
     await saveRecording(recording);

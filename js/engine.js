@@ -4,7 +4,20 @@ import { poolFor, familyOf, DRUMS } from './instruments.js';
 import { hash32, unit, stepIndex, fold, LENGTHS, REGISTERS } from './mapping.js';
 
 const GRID = { off: 0, '1/4': 1, '1/8': 0.5, '1/16': 0.25, '1/32': 0.125 };
-const MAX_VOICES = 48;
+
+// Busy sources (hundreds of events a minute) used to stutter: notes were scheduled only 30 ms
+// ahead (any main-thread hiccup made them late), piled onto the same grid step, and one source
+// could take every voice. These keep the output steady:
+export const LIMITS = {
+  lookahead: 0.12, // s between "now" and the earliest note: room for the main thread to be busy
+  voices: 48, // notes sounding at once, all sources
+  perSource: 10, // … per source
+  perSlot: 4, // notes starting on the same grid step (or within `slot` s when not quantized)
+  perSlotPerSource: 2,
+  slot: 0.04,
+  spill: 3, // a full step pushes a note up to this many steps later, then drops it
+  quietEvery: 0.125, // events that don't play reach the map/log at most every 125 ms per source
+};
 
 export class Engine {
   constructor({ state, audio, midi }) {
@@ -13,8 +26,11 @@ export class Engine {
     this.midi = midi;
     this.listeners = [];
     this.buckets = new Map();
-    this.inFlight = [];
-    this.stats = new Map();
+    this.inFlight = []; // { source, end }
+    this.slots = new Map(); // step start (ms) → { all, [source]: n }
+    this.stats = new Map(); // source → events per second, last 60 s
+    this.lastQuiet = new Map();
+    this.limits = { ...LIMITS };
   }
 
   on(fn) {
@@ -25,12 +41,23 @@ export class Engine {
     return this.audio.ctx ? this.audio.ctx.currentTime : performance.now() / 1000;
   }
 
+  // A ring of 60 one-second counters per source: O(1) per event even at thousands a minute.
+  count(id) {
+    const sec = Math.floor(performance.now() / 1000);
+    let s = this.stats.get(id);
+    if (!s) this.stats.set(id, (s = { counts: new Uint32Array(60), sec }));
+    this.advance(s, sec);
+    s.counts[sec % 60]++;
+  }
+  advance(s, sec) {
+    for (let t = Math.min(sec, s.sec + 60); t > s.sec; t--) s.counts[t % 60] = 0;
+    s.sec = Math.max(s.sec, sec);
+  }
   eventsPerMinute(id) {
     const s = this.stats.get(id);
     if (!s) return 0;
-    const cutoff = performance.now() - 60000;
-    while (s.length && s[0] < cutoff) s.shift();
-    return s.length;
+    this.advance(s, Math.floor(performance.now() / 1000));
+    return s.counts.reduce((a, b) => a + b, 0);
   }
 
   // Token bucket: `rate` notes/s on average, bursts up to 2×.
@@ -45,11 +72,25 @@ export class Engine {
     return true;
   }
 
-  when() {
+  // The first free step for this source's note, or null when the next few are all full.
+  when(sourceId) {
     const g = this.state.global;
-    const t = this.now() + 0.03;
+    const L = this.limits;
+    const t = this.now() + L.lookahead;
     const grid = (GRID[g.quantize] || 0) * (60 / g.bpm);
-    return grid ? Math.ceil(t / grid) * grid : t;
+    const step = grid || L.slot;
+    const first = grid ? Math.ceil(t / grid) * grid : t;
+    for (let i = 0; i <= L.spill; i++) {
+      const when = first + i * step;
+      const key = Math.round((grid ? when : Math.floor(when / step) * step) * 1000);
+      let slot = this.slots.get(key);
+      if (!slot) this.slots.set(key, (slot = { all: 0 }));
+      if (slot.all >= L.perSlot || (slot[sourceId] || 0) >= L.perSlotPerSource) continue;
+      slot.all++;
+      slot[sourceId] = (slot[sourceId] || 0) + 1;
+      return when;
+    }
+    return null;
   }
 
   handle(src, ev) {
@@ -59,14 +100,19 @@ export class Engine {
       values.lat = ev.lat;
       values.lon = ev.lon;
     }
-    let s = this.stats.get(src.id);
-    if (!s) this.stats.set(src.id, (s = []));
-    s.push(performance.now());
+    this.count(src.id);
 
     const out = { src, ev, values, notes: [] };
     if (cfg.enabled && this.allow(src.id, cfg.rate)) {
       const n = this.voice(src, cfg, ev, values);
       if (n) out.notes = this.play(n);
+    }
+    // the map and the log get every played note but only a sample of the rest, so a firehose
+    // of events can't keep the main thread (and with it the audio scheduling) busy
+    if (!out.notes.length) {
+      const t = performance.now() / 1000;
+      if (t - (this.lastQuiet.get(src.id) || 0) < this.limits.quietEvery) return;
+      this.lastQuiet.set(src.id, t);
     }
     for (const fn of this.listeners) fn(out);
   }
@@ -104,13 +150,17 @@ export class Engine {
 
   play(n) {
     const now = this.now();
-    this.inFlight = this.inFlight.filter((t) => t > now);
-    if (this.inFlight.length >= MAX_VOICES) return [];
-    const when = this.when();
+    const L = this.limits;
+    this.inFlight = this.inFlight.filter((v) => v.end > now);
+    if (this.inFlight.length >= L.voices) return [];
+    if (this.inFlight.filter((v) => v.source === n.source).length >= L.perSource) return [];
+    for (const k of this.slots.keys()) if (k < (now - 1) * 1000) this.slots.delete(k);
+    const when = this.when(n.source);
+    if (when === null) return [];
     const voice = { ...n, when, delayMs: (when - now) * 1000 };
     if (this.state.global.internal) this.audio.play(voice);
     this.midi.play(voice, voice.delayMs);
-    this.inFlight.push(when + n.duration);
+    this.inFlight.push({ source: n.source, end: when + n.duration });
     return [voice];
   }
 }

@@ -169,7 +169,7 @@ test('tapping a tile switches the source on and off; filters narrow the list', a
   await expect(page.locator('.tile')).toHaveCount(27);
 });
 
-test('clicking a source on the map opens its sheet', async ({ page }) => {
+test('clicking a source on the map opens its sheet', async ({ page }, testInfo) => {
   await page.goto('/');
   await page.click('[data-view="dk"]'); // hold the view still (AUTO keeps refitting)
   await page.waitForTimeout(300);
@@ -179,12 +179,20 @@ test('clicking a source on the map opens its sheet', async ({ page }) => {
     const r = map.getContainer().getBoundingClientRect();
     return { x: r.left + p.x, y: r.top + p.y };
   });
-  await page.mouse.click(pt.x, pt.y);
+  if (testInfo.project.use.hasTouch) await page.touchscreen.tap(pt.x, pt.y);
+  else await page.mouse.click(pt.x, pt.y);
   await expect(page.locator('#sheet h2')).toContainText('Energinet');
 });
 
 test('settings: one tab at a time, save bar always visible, presets load/share/delete', async ({ page, context }) => {
-  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  // clipboard permissions differ per browser: capture what the page copies instead
+  // (and no native share sheet, which phones would open for links)
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'share', { value: undefined, configurable: true });
+    const clip = navigator.clipboard || {};
+    clip.writeText = async (t) => void (window.__copied = t);
+    if (!navigator.clipboard) Object.defineProperty(Navigator.prototype, 'clipboard', { value: clip, configurable: true });
+  });
   await page.goto('/');
   await openSettings(page);
   const sheet = page.locator('#sheet');
@@ -207,7 +215,7 @@ test('settings: one tab at a time, save bar always visible, presets load/share/d
   const mine = sheet.locator('.preset', { hasText: 'my blues' });
   await mine.locator('button', { hasText: 'Share' }).click();
   await expect(sheet.locator('.msg')).toContainText('copied');
-  const link = await page.evaluate(() => navigator.clipboard.readText());
+  const link = await page.evaluate(() => window.__copied);
   expect(link).toMatch(/#p=[\w-]+$/);
 
   // load a built-in, then our own again
@@ -260,9 +268,14 @@ test('recording: sound + MIDI file, listed with play/download/delete', async ({ 
   expect(bytes.subarray(0, 4).toString()).toBe('MThd');
   const noteOns = [...bytes].filter((b, i) => (b & 0xf0) === 0x90 && i > 22).length;
   expect(noteOns).toBeGreaterThan(3);
-  const soundDl = page.waitForEvent('download');
-  await rec.locator('button', { hasText: 'Sound' }).click();
-  expect((await soundDl).suggestedFilename()).toMatch(/^datamusak-\d{8}-\d{6}\.(webm|ogg|m4a)$/);
+  if (await page.evaluate(() => typeof MediaRecorder === 'function')) {
+    const soundDl = page.waitForEvent('download');
+    await rec.locator('button', { hasText: 'Sound' }).click();
+    expect((await soundDl).suggestedFilename()).toMatch(/^datamusak-\d{8}-\d{6}\.(webm|ogg|m4a)$/);
+  } else {
+    // browsers that can't record sound still get the MIDI file, and say so
+    await expect(rec).toContainText('MIDI only');
+  }
   await rec.locator('button', { hasText: 'Delete' }).click();
   await expect(sheet.locator('.recording')).toHaveCount(0);
 });
