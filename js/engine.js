@@ -37,8 +37,17 @@ export class Engine {
     this.listeners.push(fn);
   }
 
+  // The audio clock while sound runs; otherwise (suspended, no audio device, MIDI only) the
+  // page clock, which keeps moving — a frozen clock would never let notes finish.
   now() {
-    return this.audio.ctx ? this.audio.ctx.currentTime : performance.now() / 1000;
+    const audio = !!this.audio.running;
+    if (audio !== this.audioClock) {
+      // the two clocks don't share a zero: forget what was booked on the other one
+      this.audioClock = audio;
+      this.inFlight = [];
+      this.slots.clear();
+    }
+    return audio ? this.audio.ctx.currentTime : performance.now() / 1000;
   }
 
   // A ring of 60 one-second counters per source: O(1) per event even at thousands a minute.

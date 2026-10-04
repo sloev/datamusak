@@ -178,3 +178,17 @@ test('busy sources: one source can not take every voice from the others', () => 
   a.engine.handle(other, { key: 'station', values: { temp: 3 } });
   assert.ok(a.played.some((n) => n.source === 'dmi-weather'));
 });
+
+test('switching between the page clock and the audio clock forgets old bookings', () => {
+  const { engine, state, played, src } = setup('hsl', {}, { quantize: '1/16', bpm: 120 }, {});
+  for (let i = 0; i < 50; i++) engine.handle(src, { key: `bus${i}`, values: { speed: i } });
+  const before = played.length;
+  engine.handle(src, { key: 'one-more', values: { speed: 1 } });
+  assert.equal(played.length, before, 'page clock: this source is full for now');
+  // sound starts: the audio clock begins near 0
+  engine.audio.ctx = { currentTime: 0.5 };
+  engine.audio.running = true;
+  engine.handle(src, { key: 'next', values: { speed: 3 } });
+  assert.equal(played.length, before + 1, 'not blocked by notes booked on the page clock');
+  assert.ok(played.at(-1).when < 1);
+});

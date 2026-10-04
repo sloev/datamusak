@@ -69,7 +69,8 @@ export class Recorder {
     clearInterval(rec.tick);
     if (rec.mr) {
       rec.mr.stop();
-      await rec.done;
+      // some engines never fire 'stop' for a stream that went silent; don't hang on it
+      await Promise.race([rec.done, new Promise((r) => setTimeout(r, 3000))]);
     }
     try {
       if (rec.dest) this.audio.master.disconnect(rec.dest);
@@ -108,16 +109,31 @@ async function tx(mode, fn) {
     t.onerror = () => reject(t.error);
   });
 }
+// Where IndexedDB can't store them (private modes, some engines refuse Blobs), recordings
+// live in memory for this visit instead of being lost.
+const memory = new Map();
 export async function listRecordings() {
-  const all = await tx('readonly', (s) => s.getAll());
-  return (all || []).sort((a, b) => b.created - a.created);
+  let stored = [];
+  try {
+    stored = (await tx('readonly', (s) => s.getAll())) || [];
+  } catch {}
+  return [...stored, ...memory.values()].sort((a, b) => b.created - a.created);
 }
 export async function saveRecording(r) {
-  await tx('readwrite', (s) => s.put(r));
+  try {
+    await tx('readwrite', (s) => s.put(r));
+  } catch {
+    memory.set(r.id, r);
+  }
   const all = await listRecordings();
   for (const old of all.slice(KEEP)) await deleteRecording(old.id);
 }
-export const deleteRecording = (id) => tx('readwrite', (s) => s.delete(id));
+export async function deleteRecording(id) {
+  memory.delete(id);
+  try {
+    await tx('readwrite', (s) => s.delete(id));
+  } catch {}
+}
 
 export function fileName(r, kind) {
   const d = new Date(r.created);

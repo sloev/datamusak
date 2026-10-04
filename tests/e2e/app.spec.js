@@ -185,6 +185,7 @@ test('clicking a source on the map opens its sheet', async ({ page }, testInfo) 
 });
 
 test('settings: one tab at a time, save bar always visible, presets load/share/delete', async ({ page, context }) => {
+  test.slow(); // two full page loads; emulated phones need longer
   // clipboard permissions differ per browser: capture what the page copies instead
   // (and no native share sheet, which phones would open for links)
   await page.addInitScript(() => {
