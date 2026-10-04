@@ -68,6 +68,18 @@ test('play: sources light up and data becomes varied notes on many instruments',
   await expect(page.locator('#power')).toHaveText('▶ PLAY');
 });
 
+test('tapping a source while stopped switches it on and starts playback', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#power')).toHaveClass(/nudge/);
+  const t = tile(page, 'usgs');
+  if (await t.evaluate((el) => el.classList.contains('on'))) await t.locator('.tile-main').click();
+  await t.locator('.tile-main').click();
+  await expect(t).toHaveClass(/on/);
+  await expect(page.locator('#power')).toHaveText('■ STOP');
+  await expect(page.locator('#power')).not.toHaveClass(/nudge/);
+  await expect(t.locator('.status')).toHaveClass(/ok/);
+});
+
 test('an unreachable source turns red without affecting the others', async ({ page }) => {
   await page.unrouteAll({ behavior: 'ignoreErrors' });
   await mockNetwork(page, { fail: ['data.sensor.community'] });

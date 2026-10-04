@@ -40,10 +40,13 @@ export async function mockNetwork(page, { api = API, fail = [] } = {}) {
 
 // Enable exactly these sources (and disable the rest) before pressing Start.
 export async function onlySources(page, ids) {
+  // Set up which sources are on without playing (tapping a tile would also start playback),
+  // through the saved settings, then reload.
   await page.evaluate((ids) => {
-    for (const tile of document.querySelectorAll('.tile')) {
-      const on = tile.classList.contains('on');
-      if (on !== ids.includes(tile.dataset.id)) tile.querySelector('.tile-main').click();
-    }
+    const { state } = window.datamusak;
+    for (const [id, cfg] of Object.entries(state.sources)) cfg.enabled = ids.includes(id);
+    localStorage.setItem('datamusak:v2', JSON.stringify(state));
   }, ids);
+  await page.reload();
+  await page.locator('.tile').first().waitFor();
 }
