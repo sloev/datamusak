@@ -17,13 +17,17 @@ export default defineConfig({
   timeout: 30000,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }], ['json', { outputFile: 'test-results/results.json' }]] : 'list',
-  use: {
-    baseURL: 'http://localhost:8123',
-    // page.route() can't see requests a service worker handles; the PWA test opts back in.
-    serviceWorkers: 'block',
-    reducedMotion: 'reduce',
-  },
-  projects: BROWSERS.map(({ name, use }) => ({ name, use })),
+  projects: BROWSERS.map(({ name, use }) => ({
+    name,
+    use: {
+      ...use,
+      baseURL: 'http://localhost:8123',
+      // page.route() can't see requests a service worker handles; the PWA test opts back in.
+      serviceWorkers: 'block',
+      // the animated logo and glitches are heavy on a software GPU
+      reducedMotion: 'reduce',
+    },
+  })),
   webServer: {
     command: 'node tests/serve.mjs',
     env: { PORT: '8123' },

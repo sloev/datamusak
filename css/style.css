@@ -290,3 +290,10 @@ body.glitching::after {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* footer: the browsers this build was tested on, fading through one by one */
+.tested { min-height: 1.4em; color: var(--mi); font-weight: 700; cursor: pointer; }
+.tested .one { display: inline-block; animation: tested-fade 1.8s steps(6) both; }
+.tested.done { opacity: 0.45; }
+@keyframes tested-fade { 0% { opacity: 0; translate: 0 6px; } 25%, 70% { opacity: 1; translate: 0 0; } 100% { opacity: 0; translate: 0 -6px; } }
+@media (prefers-reduced-motion: reduce) { .tested .one { animation: none; } }

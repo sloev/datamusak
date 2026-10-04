@@ -5,6 +5,8 @@ let errors;
 test.beforeEach(async ({ page }) => {
   errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
+  // the reducedMotion context option doesn't reach the page in every browser build; this does
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await mockNetwork(page);
 });
 test.afterEach(() => expect(errors, 'uncaught page errors').toEqual([]));
@@ -370,4 +372,22 @@ test('heavy libraries are not loaded until needed', async ({ page }) => {
   }
   await page.click('#power');
   await expect.poll(() => requested.some((p) => p.endsWith('WebAudioFontPlayer.js'))).toBe(true);
+});
+
+test('footer lists the browsers this build was tested on', async ({ page }) => {
+  await page.route('**/stats/browsers.json', (r) =>
+    r.fulfill({ contentType: 'application/json', body: JSON.stringify({ testedAt: '2026-10-04T12:00:00Z', browsers: [
+      { id: 'chrome', label: 'Chrome', engine: 'chromium', version: '141.0.7390.37', passed: 24, failed: 0, ok: true },
+      { id: 'safari', label: 'Safari', engine: 'webkit', version: '26.0', passed: 24, failed: 0, ok: true },
+      { id: 'firefox', label: 'Firefox', engine: 'firefox', version: '142.0', passed: 20, failed: 4, ok: false },
+    ] }) }));
+  await page.goto('/');
+  const line = page.locator('#tested');
+  // tests run with reduced motion: the whole list, no fading
+  await expect(line).toHaveText('✓ tested & working: Chrome 141 · Safari 26');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await line.click();
+  await expect(line).toHaveText('✓ Chrome 141');
+  await expect(line).toHaveText('✓ Safari 26', { timeout: 4000 });
+  await expect(line).toContainText('tested & working on 2 browsers', { timeout: 4000 });
 });

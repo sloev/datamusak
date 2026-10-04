@@ -499,6 +499,40 @@ if (state.global.online) setTimeout(() => presence.join().then(renderOnline).cat
 
 // ---------------------------------------------------------------- footer
 
+// The browsers CI ran the whole test suite on for this build (stats/browsers.json, written at
+// deploy by scripts/browser-report.mjs): each fades in and away, then a quiet summary stays.
+fetch('stats/browsers.json')
+  .then((r) => r.json())
+  .then(({ browsers = [], testedAt }) => {
+    const ok = browsers.filter((b) => b.ok);
+    if (!ok.length) return;
+    const el = $('#tested');
+    const names = ok.map((b) => `${b.label} ${String(b.version || '').split('.')[0]}`.trim());
+    const day = testedAt ? new Date(testedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '';
+    const summary = `✓ tested & working on ${ok.length} browsers${day ? ' · ' + day : ''}`;
+    el.title = `Tested & working: ${names.join(', ')}`;
+    el.hidden = false;
+    let timer;
+    const play = () => {
+      clearTimeout(timer);
+      el.classList.remove('done');
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        el.textContent = `✓ tested & working: ${names.join(' · ')}`;
+        return;
+      }
+      names.forEach((n, i) => {
+        timer = setTimeout(() => el.replaceChildren(h('span', { class: 'one' }, `✓ ${n}`)), i * 1800);
+      });
+      timer = setTimeout(() => {
+        el.textContent = summary;
+        el.classList.add('done');
+      }, names.length * 1800);
+    };
+    el.onclick = play;
+    play();
+  })
+  .catch(() => {});
+
 $('#made-with').textContent = [...'💖💘💜🧡💛💚💙✨🌈🦄🍩🪐🔥👾🎉🍄🌀🚀🛸🎨🐙🦖🍭💾🕹️🪩🎛️📡🎧🛰️'][Math.floor(Math.random() * 30)] || '🍄';
 // PWA install: Chromium offers a prompt event; iOS needs the Share-sheet route.
 let installPrompt = null;
