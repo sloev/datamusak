@@ -1,19 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Engine } from '../../js/engine.js';
+import { Engine, LIMITS } from '../../js/engine.js';
 import { SOURCES, SOURCE_BY_ID } from '../../js/sources/index.js';
 import { loadState, defaultMapping } from '../../js/state.js';
 import { SCALES, DRUM_NOTES } from '../../js/scales.js';
 import { poolFor, FAMILIES, DRUMS } from '../../js/instruments.js';
 import { fold, stepIndex, unit, hash32, REGISTERS } from '../../js/mapping.js';
 
-function setup(id, over = {}, global = {}) {
+// Mapping tests look at the music only, so the output limits (see LIMITS) are off unless asked for.
+const UNLIMITED = { voices: Infinity, perSource: Infinity, perSlot: Infinity, perSlotPerSource: Infinity, quietEvery: 0 };
+function setup(id, over = {}, global = {}, limits = UNLIMITED) {
   const played = [];
   const midiSent = [];
   const state = loadState(SOURCES);
   Object.assign(state.global, { quantize: 'off' }, global);
   Object.assign(state.sources[id], { enabled: true, rate: 1000 }, over);
   const engine = new Engine({ state, audio: { ctx: null, play: (n) => played.push(n) }, midi: { play: (n) => midiSent.push(n) } });
+  Object.assign(engine.limits, limits);
   const out = [];
   engine.on((o) => out.push(o));
   return { engine, state, played, midiSent, out, src: SOURCE_BY_ID[id] };
@@ -150,4 +153,42 @@ test('defaults: every source has valid families, register and fields', () => {
     assert.ok(d.families === 'all' || d.families.every((f) => ids.has(f)), src.id);
     assert.ok(REGISTERS[d.register], src.id);
   }
+});
+
+test('busy sources: notes are scheduled ahead, spread over grid steps, and capped per source', () => {
+  const { engine, played, out, src } = setup('hsl', {}, { quantize: '1/16', bpm: 120 }, {});
+  const t0 = engine.now();
+  for (let i = 0; i < 400; i++) engine.handle(src, { key: `bus${i % 37}`, values: { speed: i % 20, delay: i % 7 } });
+  assert.ok(played.length > 0);
+  assert.ok(played.length <= LIMITS.perSource, `at most ${LIMITS.perSource} notes from one source at once, got ${played.length}`);
+  for (const n of played) assert.ok(n.when - t0 >= LIMITS.lookahead - 1e-6, 'scheduled with lookahead');
+  const perStep = {};
+  for (const n of played) perStep[n.when] = (perStep[n.when] || 0) + 1;
+  assert.ok(Object.values(perStep).every((c) => c <= LIMITS.perSlotPerSource), JSON.stringify(perStep));
+  // and the map/log only see a sample of the unplayed flood
+  assert.ok(out.length < 60, String(out.length));
+  assert.equal(engine.eventsPerMinute('hsl'), 400, 'every event still counts');
+});
+
+test('busy sources: one source can not take every voice from the others', () => {
+  const a = setup('hsl', {}, { quantize: '1/16', bpm: 120 }, {});
+  for (let i = 0; i < 200; i++) a.engine.handle(a.src, { key: `bus${i}`, values: { speed: i } });
+  const other = SOURCE_BY_ID['dmi-weather'];
+  Object.assign(a.state.sources['dmi-weather'], { enabled: true, rate: 1000 });
+  a.engine.handle(other, { key: 'station', values: { temp: 3 } });
+  assert.ok(a.played.some((n) => n.source === 'dmi-weather'));
+});
+
+test('switching between the page clock and the audio clock forgets old bookings', () => {
+  const { engine, state, played, src } = setup('hsl', {}, { quantize: '1/16', bpm: 120 }, {});
+  for (let i = 0; i < 50; i++) engine.handle(src, { key: `bus${i}`, values: { speed: i } });
+  const before = played.length;
+  engine.handle(src, { key: 'one-more', values: { speed: 1 } });
+  assert.equal(played.length, before, 'page clock: this source is full for now');
+  // sound starts: the audio clock begins near 0
+  engine.audio.ctx = { currentTime: 0.5 };
+  engine.audio.running = true;
+  engine.handle(src, { key: 'next', values: { speed: 3 } });
+  assert.equal(played.length, before + 1, 'not blocked by notes booked on the page clock');
+  assert.ok(played.at(-1).when < 1);
 });

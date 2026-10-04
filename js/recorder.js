@@ -31,14 +31,20 @@ export class Recorder {
   start() {
     const { ctx, master } = this.audio;
     if (!ctx || !master || this.active) return false;
-    const dest = ctx.createMediaStreamDestination();
-    master.connect(dest);
-    const mimeType = Recorder.mimeType();
-    const mr = new MediaRecorder(dest.stream, mimeType ? { mimeType } : undefined);
-    const rec = { mr, dest, chunks: [], notes: [], t0: ctx.currentTime, started: performance.now(), bpm: this.state.global.bpm };
-    mr.ondataavailable = (e) => e.data.size && rec.chunks.push(e.data);
-    rec.done = new Promise((resolve) => (mr.onstop = resolve));
-    mr.start(1000);
+    const rec = { mr: null, dest: null, chunks: [], notes: [], t0: ctx.currentTime, started: performance.now(), bpm: this.state.global.bpm };
+    // Sound, where the browser can record it; the MIDI file of the notes works everywhere.
+    try {
+      rec.dest = ctx.createMediaStreamDestination();
+      master.connect(rec.dest);
+      const mimeType = Recorder.mimeType();
+      rec.mr = new MediaRecorder(rec.dest.stream, mimeType ? { mimeType } : undefined);
+      rec.mr.ondataavailable = (e) => e.data.size && rec.chunks.push(e.data);
+      rec.done = new Promise((resolve) => (rec.mr.onstop = resolve));
+      rec.mr.start(1000);
+    } catch {
+      if (rec.dest) master.disconnect(rec.dest);
+      rec.mr = null;
+    }
     rec.timer = setTimeout(() => this.stop(), MAX_SECONDS * 1000);
     rec.tick = setInterval(() => this.onChange(), 500);
     this.active = rec;
@@ -61,10 +67,13 @@ export class Recorder {
     this.active = null;
     clearTimeout(rec.timer);
     clearInterval(rec.tick);
-    rec.mr.stop();
-    await rec.done;
+    if (rec.mr) {
+      rec.mr.stop();
+      // some engines never fire 'stop' for a stream that went silent; don't hang on it
+      await Promise.race([rec.done, new Promise((r) => setTimeout(r, 3000))]);
+    }
     try {
-      this.audio.master.disconnect(rec.dest);
+      if (rec.dest) this.audio.master.disconnect(rec.dest);
     } catch {}
     const created = Date.now();
     const recording = {
@@ -72,7 +81,7 @@ export class Recorder {
       created,
       seconds: Math.min(MAX_SECONDS, Math.round((performance.now() - rec.started) / 100) / 10),
       notes: rec.notes.length,
-      audio: new Blob(rec.chunks, { type: rec.mr.mimeType || 'audio/webm' }),
+      audio: rec.mr && rec.chunks.length ? new Blob(rec.chunks, { type: rec.mr.mimeType || 'audio/webm' }) : null,
       midi: new Blob([writeMidi(rec.notes, { bpm: rec.bpm })], { type: 'audio/midi' }),
     };
     await saveRecording(recording);
@@ -100,16 +109,31 @@ async function tx(mode, fn) {
     t.onerror = () => reject(t.error);
   });
 }
+// Where IndexedDB can't store them (private modes, some engines refuse Blobs), recordings
+// live in memory for this visit instead of being lost.
+const memory = new Map();
 export async function listRecordings() {
-  const all = await tx('readonly', (s) => s.getAll());
-  return (all || []).sort((a, b) => b.created - a.created);
+  let stored = [];
+  try {
+    stored = (await tx('readonly', (s) => s.getAll())) || [];
+  } catch {}
+  return [...stored, ...memory.values()].sort((a, b) => b.created - a.created);
 }
 export async function saveRecording(r) {
-  await tx('readwrite', (s) => s.put(r));
+  try {
+    await tx('readwrite', (s) => s.put(r));
+  } catch {
+    memory.set(r.id, r);
+  }
   const all = await listRecordings();
   for (const old of all.slice(KEEP)) await deleteRecording(old.id);
 }
-export const deleteRecording = (id) => tx('readwrite', (s) => s.delete(id));
+export async function deleteRecording(id) {
+  memory.delete(id);
+  try {
+    await tx('readwrite', (s) => s.delete(id));
+  } catch {}
+}
 
 export function fileName(r, kind) {
   const d = new Date(r.created);

@@ -70,6 +70,12 @@ Mapping is **deterministic**: the same data always makes the same sound. Nothing
 
 `.github/workflows/source-stats.yml` opens the real site in Chromium every Monday, switches every source on for two minutes, and commits [`stats/sources.json`](stats/sources.json): each source's status, last message and events per minute. Real browsers hit CORS, blocked hosts and dead APIs; this records which sources actually work. The app sorts its tiles by these numbers. Run it any time from the Actions tab, or locally with `node scripts/source-stats.mjs 120`.
 
+Busy sources stay steady:
+- Notes are scheduled 120 ms ahead.
+- At most 4 notes start on the same grid step, and one source can sound at most 10 notes at once.
+- Overlapping notes get quieter, so the loudness stays even.
+- The map and the raw log show every played note but only a sample of the events that didn't play.
+
 Slow data (prices, weather, the grid) plays as a looping step sequence over the latest values, synced to the BPM, so the music changes as new data arrives. Fast streams trigger notes directly and are thinned out by each source's *max notes/s*.
 
 If a provider is down or blocks browsers, its status dot turns red and the rest keep playing.
@@ -139,7 +145,7 @@ npm run logo           # re-render assets/logo.png and the app icons from the lo
 npm run map            # rebuild assets/map/coast.json from Natural Earth (world-atlas)
 ```
 
-CI (`.github/workflows/ci.yml`) runs all tests on every push and pull request. When they pass on `master`, it deploys to GitHub Pages and stamps a fresh service-worker cache version.
+CI (`.github/workflows/ci.yml`) runs all tests on every push and pull request. The browser tests run on **desktop Chrome, Firefox and Safari (WebKit)** and on **phone-sized Chrome (Android) and Safari (iPhone)**. `scripts/browser-report.mjs` writes which browsers passed, with their versions, to `stats/browsers.json` at deploy time. The footer fades through that list ("✓ Firefox 142 …"). Locally, `npx playwright test --project=chrome` runs a single browser. When they pass on `master`, it deploys to GitHub Pages and stamps a fresh service-worker cache version.
 
 ### Code layout
 

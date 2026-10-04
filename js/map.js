@@ -45,6 +45,28 @@ export class SoundMap {
         .addTo(this.map);
       this.homes[src.id] = m;
     }
+    // Fingers are bigger than 8 px pins: a tap selects the nearest home within 22 px. (It also
+    // doesn't depend on the browser turning touches into clicks on the map's canvas.)
+    let touch = null;
+    el.addEventListener('touchstart', (e) => {
+      touch = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY, t: performance.now() } : null;
+    }, { passive: true });
+    el.addEventListener('touchend', (e) => {
+      const end = e.changedTouches[0];
+      if (e.target.closest?.('.leaflet-control')) return; // zoom buttons stay buttons
+      if (!touch || !end || Math.hypot(end.clientX - touch.x, end.clientY - touch.y) > 10 || performance.now() - touch.t > 600) return;
+      const r = el.getBoundingClientRect();
+      const pt = L.point(end.clientX - r.left, end.clientY - r.top);
+      let best = null;
+      for (const src of sources) {
+        const d = this.map.latLngToContainerPoint(src.home).distanceTo(pt);
+        if (d < 22 && (!best || d < best.d)) best = { id: src.id, d };
+      }
+      if (best) {
+        e.preventDefault(); // no second, synthesized click
+        onSelect(best.id);
+      }
+    });
     this.animate = this.animate.bind(this);
     requestAnimationFrame(this.animate);
   }

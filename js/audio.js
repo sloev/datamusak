@@ -44,6 +44,7 @@ export class AudioEngine {
     this.bus = {}; // family id → GainNode
     this.presets = new Map(); // program → preset | { drums: { note: preset } }
     this.loading = new Map(); // program → [pending voices]
+    this.live = []; // scheduled notes: { start, end, nodes }
   }
 
   get running() {
@@ -53,12 +54,16 @@ export class AudioEngine {
   async start() {
     if (!this.ctx) {
       // Create the context synchronously inside the user gesture, then fetch the engine.
-      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const Player = await LIBS.webaudiofont();
-      this.player = new Player();
-      this.build();
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback' });
+      this.ready = LIBS.webaudiofont().then((Player) => {
+        this.player = new Player();
+        this.build();
+      });
     }
-    await this.ctx.resume();
+    await this.ready;
+    // resume() never settles where there is no audio device (some headless/locked-down
+    // browsers); don't let that hold up the sources and the visuals
+    await Promise.race([this.ctx.resume(), new Promise((r) => setTimeout(r, 1000))]);
   }
 
   async stop() {
@@ -102,6 +107,7 @@ export class AudioEngine {
       g.connect(this.mix);
       this.bus[f.id] = g;
     }
+    setInterval(() => this.sweep(), 1000);
     this.applyGlobals();
   }
 
@@ -148,7 +154,10 @@ export class AudioEngine {
   }
 
   play(v) {
-    if (!this.running) return;
+    if (!this.running) {
+      this.load(v.program); // keep fetching instruments so they're ready when sound starts
+      return;
+    }
     const preset = this.presets.get(v.program);
     if (!preset) {
       this.load(v.program);
@@ -167,11 +176,21 @@ export class AudioEngine {
     panner.pan.value = Math.max(-1, Math.min(1, v.pan));
     filter.connect(panner);
     panner.connect(this.bus[v.family] || this.mix);
-    this.player.queueWaveTable(ctx, filter, p, v.when, v.note, v.duration, Math.pow(v.velocity / 127, 1.6) * 0.9);
-    setTimeout(() => {
-      filter.disconnect();
-      panner.disconnect();
-    }, (v.when - ctx.currentTime + v.duration + 2) * 1000);
+    // many overlapping notes: each gets quieter (≈ constant loudness), so the limiter doesn't pump
+    const sounding = this.live.filter((x) => x.end > v.when && x.start <= v.when).length;
+    const density = 1 / Math.sqrt(Math.max(1, sounding / 6));
+    this.player.queueWaveTable(ctx, filter, p, v.when, v.note, v.duration, Math.pow(v.velocity / 127, 1.6) * 0.9 * density);
+    this.live.push({ start: v.when, end: v.when + v.duration, nodes: [filter, panner] });
+  }
+
+  // One sweep a second disconnects finished notes (instead of a timer per note).
+  sweep() {
+    const t = this.ctx.currentTime - 2; // leave room for release tails
+    this.live = this.live.filter((x) => {
+      if (x.end > t) return true;
+      for (const n of x.nodes) n.disconnect();
+      return false;
+    });
   }
 
   // A quick audition of one family (used by the mixer).
