@@ -337,6 +337,8 @@ for (const [name, vp] of [['phone', { width: 360, height: 760 }], ['tablet', { w
     await page.setViewportSize(vp);
     await page.goto('/');
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+    // the logo spans the screen on phones and tablets (up to its 600 px)
+    if (vp.width < 1000) expect((await page.locator('#logo').boundingBox()).width).toBeGreaterThanOrEqual(Math.min(600, vp.width - 40));
     await page.click('.tile[data-id="ais"] .tile-more');
     await expect.poll(async () => {
       const box = await page.locator('#sheet').boundingBox();
