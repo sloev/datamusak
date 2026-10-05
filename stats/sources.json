@@ -1,247 +1,230 @@
 {
-  "checkedAt": "2026-10-03T13:43:29.698Z",
+  "checkedAt": "2026-10-05T12:21:54.413Z",
   "seconds": 120,
   "sources": {
     "energinet-grid": {
-      "status": "error",
-      "message": "network/CORS error — source unreachable from this browser",
+      "status": "idle",
+      "message": "",
       "eventsPerMin": 0
     },
     "energinet-co2": {
-      "status": "error",
-      "message": "network/CORS error — source unreachable from this browser",
+      "status": "idle",
+      "message": "",
       "eventsPerMin": 0
     },
     "elpris": {
-      "status": "ok",
-      "message": "24 price slots",
-      "eventsPerMin": 178
+      "status": "idle",
+      "message": "",
+      "eventsPerMin": 0
     },
     "dmi-weather": {
-      "status": "ok",
-      "message": "101 stations",
-      "eventsPerMin": 343
+      "status": "idle",
+      "message": "",
+      "eventsPerMin": 0
     },
     "dmi-lightning": {
-      "status": "ok",
-      "message": "no strikes right now",
+      "status": "idle",
+      "message": "",
       "eventsPerMin": 0
     },
     "dmi-ocean": {
-      "status": "ok",
-      "message": "32 gauges",
-      "eventsPerMin": 46
+      "status": "idle",
+      "message": "",
+      "eventsPerMin": 0
     },
     "open-meteo": {
-      "status": "ok",
-      "message": "15 towns",
-      "eventsPerMin": 178
+      "status": "idle",
+      "message": "",
+      "eventsPerMin": 0
     },
     "sensor-community": {
-      "status": "ok",
-      "message": "11 sensor sites",
-      "eventsPerMin": 344
+      "status": "idle",
+      "message": "",
+      "eventsPerMin": 0
     },
     "bikeshare": {
-      "status": "error",
-      "message": "network/CORS error — source unreachable from this browser",
+      "status": "idle",
+      "message": "",
       "eventsPerMin": 0
     },
     "aircraft": {
-      "status": "error",
-      "message": "network/CORS error — source unreachable from this browser",
+      "status": "idle",
+      "message": "",
       "eventsPerMin": 0
     },
     "ais": {
-      "status": "ok",
-      "message": "subscribed vessels-v2/+/location",
-      "eventsPerMin": 1255
+      "status": "idle",
+      "message": "",
+      "eventsPerMin": 0
     },
     "hsl": {
-      "status": "ok",
-      "message": "subscribed /hfp/v2/journey/ongoing/vp/tram/#",
-      "eventsPerMin": 25685
+      "status": "idle",
+      "message": "",
+      "eventsPerMin": 0
     },
     "fin-trains": {
-      "status": "ok",
-      "message": "subscribed train-locations/#",
-      "eventsPerMin": 4110
+      "status": "idle",
+      "message": "",
+      "eventsPerMin": 0
     },
     "wikipedia": {
-      "status": "ok",
-      "message": "streaming",
+      "status": "idle",
+      "message": "",
       "eventsPerMin": 0
     },
     "bluesky": {
-      "status": "ok",
-      "message": "connected",
-      "eventsPerMin": 5
+      "status": "idle",
+      "message": "",
+      "eventsPerMin": 0
     },
     "usgs": {
-      "status": "ok",
-      "message": "204 quakes",
-      "eventsPerMin": 343
+      "status": "idle",
+      "message": "",
+      "eventsPerMin": 0
     },
     "iss": {
-      "status": "ok",
-      "message": "5253 km from Copenhagen",
-      "eventsPerMin": 10
+      "status": "idle",
+      "message": "",
+      "eventsPerMin": 0
     },
     "coinbase": {
-      "status": "ok",
-      "message": "connected",
-      "eventsPerMin": 278
+      "status": "idle",
+      "message": "",
+      "eventsPerMin": 0
     },
     "bitcoin-mempool": {
-      "status": "connecting",
-      "message": "closed, retrying in 60s",
+      "status": "idle",
+      "message": "",
       "eventsPerMin": 0
     },
     "nostr-notes": {
-      "status": "connecting",
-      "message": "closed, retrying in 60s",
-      "eventsPerMin": 60
+      "status": "idle",
+      "message": "",
+      "eventsPerMin": 0
     },
     "nostr-zaps": {
-      "status": "connecting",
-      "message": "closed, retrying in 60s",
-      "eventsPerMin": 3
+      "status": "idle",
+      "message": "",
+      "eventsPerMin": 0
     },
     "nostr-firehose": {
-      "status": "connecting",
-      "message": "closed, retrying in 60s",
-      "eventsPerMin": 2413
+      "status": "idle",
+      "message": "",
+      "eventsPerMin": 0
     },
     "webtorrent": {
-      "status": "ok",
-      "message": "0 peers · 12.1 MB · 0 KB/s",
+      "status": "idle",
+      "message": "",
       "eventsPerMin": 0
     },
     "listeners": {
-      "status": "ok",
-      "message": "0 other listeners",
+      "status": "idle",
+      "message": "",
       "eventsPerMin": 0
     },
     "gifshooter": {
-      "status": "ok",
-      "message": "canvas “public” · 0 painters seen",
+      "status": "idle",
+      "message": "",
       "eventsPerMin": 0
     },
     "custom-mqtt": {
-      "status": "ok",
-      "message": "subscribed #",
-      "eventsPerMin": 146378
+      "status": "idle",
+      "message": "",
+      "eventsPerMin": 0
     },
     "random-walk": {
-      "status": "ok",
-      "message": "generating",
-      "eventsPerMin": 343
+      "status": "idle",
+      "message": "",
+      "eventsPerMin": 0
     }
   },
   "hosts": {
+    "ws-feed.exchange.coinbase.com": {
+      "websocket opened": 1,
+      "websocket closed": 1
+    },
+    "relay.damus.io": {
+      "websocket opened": 2,
+      "websocket error: Error during WebSocket handshake: Unexpected response code: 503": 1,
+      "websocket closed": 2,
+      "websocket error: WebSocket is closed before the connection is established.": 1
+    },
+    "relay.primal.net": {
+      "websocket opened": 1,
+      "websocket error: WebSocket is closed before the connection is established.": 1,
+      "websocket closed": 1
+    },
     "earthquake.usgs.gov": {
       "HTTP 200": 1
     },
-    "ws-feed.exchange.coinbase.com": {
-      "websocket opened": 1
+    "offchain.pub": {
+      "websocket opened": 2,
+      "websocket closed": 2
     },
-    "relay.damus.io": {
-      "websocket opened": 4,
-      "websocket error: Error during WebSocket handshake: Unexpected response code: 503": 1,
-      "websocket closed": 1
-    },
-    "relay.primal.net": {
-      "websocket opened": 3
-    },
-    "ws.blockchain.info": {
-      "websocket opened": 6,
-      "websocket error: Error during WebSocket handshake: Unexpected response code: 502": 5,
-      "websocket closed": 6,
-      "websocket error: Error during WebSocket handshake: Unexpected response code: 503": 1
-    },
-    "jetstream2.us-east.bsky.network": {
-      "websocket opened": 1
-    },
-    "surikov.github.io": {
-      "HTTP 200": 147
-    },
-    "webtorrent.io": {
-      "HTTP 200": 1,
-      "HTTP 206": 106
-    },
-    "stream.wikimedia.org": {
+    "data.vatsim.net": {
       "HTTP 200": 1
+    },
+    "raw.githubusercontent.com": {
+      "HTTP 200": 2
+    },
+    "gbfs.api.ridedott.com": {
+      "HTTP 200": 1,
+      "net::ERR_ABORTED": 1
     },
     "www.elprisenligenu.dk": {
       "HTTP 200": 2
     },
-    "api.energidataservice.dk": {
-      "net::ERR_FAILED": 4
-    },
     "nos.lol": {
-      "websocket opened": 18,
-      "websocket error: Error during WebSocket handshake: Unexpected response code: 502": 18,
-      "websocket closed": 18
+      "websocket opened": 1,
+      "websocket error: WebSocket is closed before the connection is established.": 1,
+      "websocket closed": 1
     },
-    "api.open-meteo.com": {
+    "webtorrent.io": {
       "HTTP 200": 1
     },
+    "data.sensor.community": {
+      "net::ERR_ABORTED": 1
+    },
+    "api.open-meteo.com": {
+      "net::ERR_ABORTED": 1
+    },
     "opendataapi.dmi.dk": {
-      "HTTP 200": 14
+      "net::ERR_ABORTED": 11
+    },
+    "api.wheretheiss.at": {
+      "net::ERR_ABORTED": 1
+    },
+    "surikov.github.io": {
+      "HTTP 200": 4
+    },
+    "stream.wikimedia.org": {
+      "net::ERR_ABORTED": 1
     },
     "nostr-01.uid.ovh": {
       "websocket opened": 1
     },
-    "stables.donkey.bike": {
-      "net::ERR_FAILED": 2
-    },
-    "api.adsb.lol": {
-      "net::ERR_FAILED": 1
-    },
-    "api.wheretheiss.at": {
-      "HTTP 200": 20
-    },
-    "data.sensor.community": {
-      "HTTP 200": 1
-    },
-    "opensky-network.org": {
-      "net::ERR_FAILED": 6
-    },
-    "nostr-01.yakihonne.com": {
-      "websocket opened": 1
+    "relay.agorist.space": {
+      "websocket opened": 6,
+      "websocket error: Error during WebSocket handshake: Unexpected response code: 502": 6,
+      "websocket closed": 6
     },
     "yabu.me": {
       "websocket opened": 1
     },
-    "tracker.webtorrent.dev": {
+    "purplerelay.com": {
       "websocket opened": 1,
       "websocket closed": 1
     },
-    "nostr.data.haus": {
+    "basspistol.org": {
       "websocket opened": 1
     },
     "relay.artio.inf.unibe.ch": {
       "websocket opened": 1
     },
-    "mqtt.hsl.fi": {
+    "nostr.data.haus": {
       "websocket opened": 1
     },
-    "tracker.openwebtorrent.com": {
-      "websocket opened": 1,
-      "websocket closed": 1
-    },
-    "test.mosquitto.org:8081": {
-      "websocket opened": 6,
-      "websocket error: Connection closed before receiving a handshake response": 5,
-      "websocket closed": 5
-    },
-    "": {
-      "HTTP 200": 1
-    },
-    "meri.digitraffic.fi": {
-      "websocket opened": 1
-    },
-    "rata.digitraffic.fi": {
+    "nostr-01.yakihonne.com": {
       "websocket opened": 1
     }
   }
