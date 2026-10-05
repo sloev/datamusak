@@ -101,12 +101,18 @@ $('#raw').onclick = () => {
 // ------------------------------------------------------------------ logo
 
 // The logo is a looping video (pre-rendered from the WebGL shader in scripts/logo-shader.js), so it moves on
-// every device. If autoplay was refused (e.g. battery saver), start it on the first tap.
+// every device. Phones pause it when you leave (another app, the lock screen, the back/forward cache)
+// and don't always resume it, and battery savers may refuse autoplay: so it restarts whenever the page
+// is shown again, on any tap, and a slow watchdog catches whatever else paused it.
 const logo = $('#logo');
-const kick = () => logo.paused && logo.play().catch(() => {});
-logo.play?.().catch(() => {});
-addEventListener('pointerdown', kick, { once: true });
-document.addEventListener('visibilitychange', () => !document.hidden && kick());
+const kick = () => !document.hidden && logo.paused && logo.play?.().catch(() => {});
+kick();
+addEventListener('pointerdown', kick);
+addEventListener('pageshow', kick); // also back/forward cache restores, which skip visibilitychange
+addEventListener('focus', kick);
+document.addEventListener('visibilitychange', kick);
+logo.addEventListener('pause', () => setTimeout(kick, 300)); // paused by the system, not by us
+setInterval(kick, 3000);
 const beatVar = () => document.documentElement.style.setProperty('--beat', `${60 / state.global.bpm}s`);
 beatVar();
 
