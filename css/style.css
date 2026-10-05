@@ -78,7 +78,9 @@ input[type='checkbox']:checked::after { content: '✓'; font: 13px/1 var(--displ
   animation: zz 1.47s steps(22) infinite;
 }
 @keyframes zz { to { background-position: -22px 0; } }
-.hero { margin: 0; line-height: 0; flex: 1 1 360px; max-width: min(600px, max(360px, 36vw)); }
+.hero { margin: 0; line-height: 0; flex: 1 1 360px; max-width: 600px; }
+/* on wide screens the logo shares the row with the controls; a little smaller leaves room for the tiles */
+@media (min-width: 1000px) { .hero { max-width: min(600px, max(360px, 36vw)); } }
 .hero video { width: 100%; height: auto; aspect-ratio: 800 / 220; display: block; background: var(--black); object-fit: contain; }
 .controls { display: flex; align-items: center; gap: 12px; }
 .power { font-size: clamp(16px, 2.4vw, 22px); padding: 12px 24px; border: 0; color: var(--ink); background: var(--ye); --sh: var(--pk); }

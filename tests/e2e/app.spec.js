@@ -22,6 +22,13 @@ test('the logo is a looping video and the footer has the donate button', async (
   const logo = page.locator('video#logo');
   for (const attr of ['autoplay', 'loop', 'muted', 'playsinline']) await expect(logo).toHaveAttribute(attr, '');
   await expect.poll(() => logo.evaluate((v) => v.currentTime), { timeout: 5000 }).toBeGreaterThan(0.2);
+  // leaving and coming back (the browser pauses it while hidden) doesn't leave it frozen
+  await logo.evaluate((v) => v.pause());
+  await page.evaluate(() => {
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+  });
+  await expect.poll(() => logo.evaluate((v) => v.paused), { timeout: 5000 }).toBe(false);
   await expect(page.locator('.foot a.coffee')).toHaveAttribute('href', 'https://www.buymeacoffee.com/sloev');
   await expect(page.locator('#made-with')).not.toBeEmpty();
 });
@@ -337,6 +344,8 @@ for (const [name, vp] of [['phone', { width: 360, height: 760 }], ['tablet', { w
     await page.setViewportSize(vp);
     await page.goto('/');
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+    // on phones the logo spans the screen (on wider screens it shares a row with the buttons)
+    if (vp.width < 500) expect((await page.locator('#logo').boundingBox()).width).toBeGreaterThanOrEqual(vp.width - 40);
     await page.click('.tile[data-id="ais"] .tile-more');
     await expect.poll(async () => {
       const box = await page.locator('#sheet').boundingBox();
